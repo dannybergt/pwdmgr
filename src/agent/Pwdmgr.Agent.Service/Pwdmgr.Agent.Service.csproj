@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <PropertyGroup>
+    <UseWindowsService>true</UseWindowsService>
+  </PropertyGroup>
+</Project>
+

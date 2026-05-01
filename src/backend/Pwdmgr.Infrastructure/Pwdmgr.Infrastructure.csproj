@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Pwdmgr.Application\Pwdmgr.Application.csproj" />
+  </ItemGroup>
+</Project>
+

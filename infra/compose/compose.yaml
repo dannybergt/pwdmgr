@@ -1,0 +1,51 @@
+services:
+  reverse-proxy:
+    image: traefik:v3
+    command:
+      - --providers.docker=true
+      - --entrypoints.web.address=:8080
+    ports:
+      - "8080:8080"
+    networks:
+      - public
+      - app
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: ../../
+      dockerfile: infra/compose/docker/api.Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Postgres: Host=postgres;Database=pwdmgr;Username=pwdmgr;Password=pwdmgr-dev-only
+    depends_on:
+      - postgres
+    networks:
+      - app
+      - data
+    labels:
+      - traefik.http.routers.pwdmgr-api.rule=PathPrefix(`/api`) || PathPrefix(`/health`)
+      - traefik.http.services.pwdmgr-api.loadbalancer.server.port=8080
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: pwdmgr
+      POSTGRES_USER: pwdmgr
+      POSTGRES_PASSWORD: pwdmgr-dev-only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - data
+
+networks:
+  public:
+  app:
+    internal: true
+  data:
+    internal: true
+
+volumes:
+  pgdata:
+

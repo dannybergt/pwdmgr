@@ -1,0 +1,15 @@
+.git
+.github
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/coverage
+docs
+tests
+*.log
+.env
+.env.*
+!.env.example
+secrets
+

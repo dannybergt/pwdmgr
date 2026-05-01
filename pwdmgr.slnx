@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/backend/Pwdmgr.Api/Pwdmgr.Api.csproj" />
+  <Project Path="src/backend/Pwdmgr.Domain/Pwdmgr.Domain.csproj" />
+  <Project Path="src/backend/Pwdmgr.Application/Pwdmgr.Application.csproj" />
+  <Project Path="src/backend/Pwdmgr.Infrastructure/Pwdmgr.Infrastructure.csproj" />
+  <Project Path="src/agent/Pwdmgr.Agent.Service/Pwdmgr.Agent.Service.csproj" />
+  <Project Path="src/agent/Pwdmgr.Agent.Cli/Pwdmgr.Agent.Cli.csproj" />
+</Solution>
+
