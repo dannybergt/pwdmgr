@@ -7,9 +7,9 @@ Last update: 2026-05-16
 ## Snapshot
 
 - **Phase:** project bootstrap. Planning is comprehensive (see [`docs/architecture/product-plan.md`](docs/architecture/product-plan.md)); no production code yet. Skeleton projects compile on CI.
-- **Branch:** `chore/foundation-and-sync`, open PR [#1](https://github.com/dannybergt/pwdmgr/pull/1) against `main`. CI fully green.
-- **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC). Wired up in this session.
-- **DockerHub namespace:** `dbergt`. Image repos for pwdmgr planned (see [ADR-0004](docs/adr/0004-dockerhub-naming-and-sync-strategy.md)), not yet published — first push needs `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` GitHub Actions secrets (maintainer action).
+- **Branch:** `main`. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1) at commit `b41cfde`. CI fully green.
+- **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC).
+- **DockerHub namespace:** `dbergt`. **`dbergt/pwdmgr-api` is live** — first multi-arch push (`amd64` + `arm64`) at `:main` and `:sha-b41cfde`. <https://hub.docker.com/r/dbergt/pwdmgr-api>. Other images (`pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway`) follow with their respective service slices.
 
 ## What runs / can run locally
 
@@ -37,25 +37,25 @@ No production environments allocated.
 
 | Target | Status |
 |---|---|
-| GitHub `dannybergt/pwdmgr` | exists, public, empty (no default branch yet). Wiring up `origin` and initial push in current session. |
-| Docker Hub `dbergt/pwdmgr-api` | not yet created. Will be auto-created on first successful CI push once `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets are configured on the repo. |
+| GitHub `dannybergt/pwdmgr` | public, default branch `main`, CI green on every push. |
+| Docker Hub `dbergt/pwdmgr-api` | **live**, public, multi-arch (`amd64` + `arm64`), tags `:main` and `:sha-<short>`. <https://hub.docker.com/r/dbergt/pwdmgr-api> |
 | Docker Hub `dbergt/pwdmgr-web` | not yet created. Dockerfile pending — follows with first frontend vertical slice. |
 | Docker Hub `dbergt/pwdmgr-worker` | not yet created. Service implementation pending (LDAP sync / rotation worker). |
 | Docker Hub `dbergt/pwdmgr-agent-gateway` | not yet created. May start as a module inside `pwdmgr-api` and extract later (per ADR-0001). |
 
-Required GitHub Actions secrets (to be set by maintainer, not by automation):
+GitHub Actions secrets configured (verified 2026-05-16):
 
-- `DOCKERHUB_USERNAME` — value: `dbergt`.
-- `DOCKERHUB_TOKEN` — Personal Access Token from <https://hub.docker.com/settings/security> with `Read, Write` scope on `dbergt/pwdmgr-*`.
+- `DOCKERHUB_USERNAME` (set 2026-05-16T22:08:57Z) — value `dbergt`.
+- `DOCKERHUB_TOKEN` (set 2026-05-16T22:10:49Z) — Docker Hub PAT, `Read, Write` on `dbergt/pwdmgr-*`. Rotate as part of the regular credential lifecycle.
 
 ## Open threads / next steps
 
-- [ ] Maintainer configures `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` GitHub secrets so CI can push images.
 - [ ] First vertical MVP slice: pick scope — current candidate is crypto spike (Argon2id WASM + WebCrypto AES-GCM round-trip), tenant + user domain migration, ciphertext-only Secret CRUD API, React unlock flow.
 - [ ] Add Dockerfiles for `pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway` when their services have real content (do NOT add empty placeholder containers — see Constitution §2.5 YAGNI).
 - [ ] Decide trademark / domain status for the product working name `Privora` (ADR-0003).
 - [ ] Install .NET 9 SDK locally so `dotnet build` is possible without CI round-trip.
 - [ ] Decide on Docker Desktop vs. Rancher Desktop for local container work.
+- [ ] `src/frontend/package.json` pins every dep to `"latest"` (Constitution §10 violation in the source-of-truth file even though `package-lock.json` is deterministic). Replace `"latest"` with explicit versions in a follow-up.
 
 ## Assumptions / decisions deferred
 
@@ -72,3 +72,4 @@ Required GitHub Actions secrets (to be set by maintainer, not by automation):
   - frontend `tsconfig.json` moduleResolution moved to `Bundler` (was deprecated `Node`); `vite-env.d.ts` added for CSS side-effect imports;
   - `*.tsbuildinfo` added to `.gitignore`.
   All four CI jobs (`backend`, `frontend`, `secret-scan`, `docker-api`) green at commit `360f14e`.
+- 2026-05-16: PR #1 squash-merged to `main` as commit `b41cfde`. Maintainer configured `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets. Post-merge `push` event triggered the `docker-api` job which built multi-arch with QEMU (4:08) and pushed `dbergt/pwdmgr-api` to Docker Hub with tags `:main` and `:sha-b41cfde`. First image is live at <https://hub.docker.com/r/dbergt/pwdmgr-api>.
