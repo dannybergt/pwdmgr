@@ -1,0 +1,28 @@
+# Gitleaks configuration for pwdmgr / Privora.
+#
+# Goal: zero plaintext secrets in the repository. Constitution AGENTS.md §6.3.
+#
+# Strategy: extend the default gitleaks ruleset, do NOT replace it.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation, examples and fixtures that contain secret-like strings on purpose."
+paths = [
+  '''(?i)\.env\.example$''',
+  '''(?i)docs/.*\.md$''',
+  '''(?i)docs/.*\.mdx?$''',
+  '''(?i)README\.md$''',
+]
+
+# Plan documents intentionally cite credential-management terminology, sample
+# OWASP references and explanatory placeholders like "change-me-use-docker-secret-in-prod".
+# We trust the documentation paths above; if a real secret ever leaks into a doc,
+# the developer is expected to redact it and rotate the underlying secret.
+
+regexes = [
+  # Documentation placeholder used in the seed compose file.
+  '''(?i)change-me-use-docker-secret-in-prod''',
+  '''(?i)pwdmgr-dev-only''',
+]

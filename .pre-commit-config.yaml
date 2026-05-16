@@ -1,0 +1,41 @@
+# Pre-commit hooks for pwdmgr / Privora.
+#
+# Install once:
+#   pip install pre-commit
+#   pre-commit install --install-hooks
+#
+# Run on all files:
+#   pre-commit run --all-files
+#
+# Constitution AGENTS.md §16: secret scan + lint + formatter on every commit.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
+    rev: 3.0.3
+    hooks:
+      - id: editorconfig-checker
+        exclude: |
+          (?x)^(
+            .*\.csproj|
+            .*\.slnx|
+            .*\.md
+          )$

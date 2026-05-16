@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
 
 jobs:
   backend:
@@ -29,8 +33,75 @@ jobs:
           cache-dependency-path: src/frontend/package-lock.json
       - name: Install frontend
         working-directory: src/frontend
-        run: npm install
+        run: npm ci
       - name: Build frontend
         working-directory: src/frontend
         run: npm run build
 
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-api:
+    needs: [backend, secret-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: dbergt/pwdmgr-api
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,prefix=sha-
+            type=raw,value=main,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+          labels: |
+            org.opencontainers.image.title=pwdmgr-api
+            org.opencontainers.image.description=Privora / pwdmgr API (zero-knowledge vault, modular monolith)
+            org.opencontainers.image.vendor=dbergt
+            org.opencontainers.image.licenses=Proprietary
+
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build (and push on main/tags) pwdmgr-api
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/compose/docker/api.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=pwdmgr-api
+          cache-to: type=gha,scope=pwdmgr-api,mode=max
