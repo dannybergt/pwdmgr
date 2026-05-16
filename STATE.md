@@ -6,10 +6,10 @@ Last update: 2026-05-16
 
 ## Snapshot
 
-- **Phase:** project bootstrap. Planning is comprehensive (see [`docs/architecture/product-plan.md`](docs/architecture/product-plan.md)); no production code yet. Skeleton projects compile; no domain logic.
-- **Branch:** `main`. Single commit. Working tree clean.
-- **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC). Local remote being wired up in current session.
-- **DockerHub namespace:** `dbergt`. Image repos for pwdmgr planned (see [ADR-0004](docs/adr/0004-dockerhub-naming-and-sync-strategy.md)), not yet published.
+- **Phase:** project bootstrap. Planning is comprehensive (see [`docs/architecture/product-plan.md`](docs/architecture/product-plan.md)); no production code yet. Skeleton projects compile on CI.
+- **Branch:** `chore/foundation-and-sync`, open PR [#1](https://github.com/dannybergt/pwdmgr/pull/1) against `main`. CI fully green.
+- **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC). Wired up in this session.
+- **DockerHub namespace:** `dbergt`. Image repos for pwdmgr planned (see [ADR-0004](docs/adr/0004-dockerhub-naming-and-sync-strategy.md)), not yet published — first push needs `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` GitHub Actions secrets (maintainer action).
 
 ## What runs / can run locally
 
@@ -65,4 +65,10 @@ Required GitHub Actions secrets (to be set by maintainer, not by automation):
 
 ## Session log
 
-- 2026-05-16: foundation session. Plan-doc duplicate at `C:/data/codex/enterprise-zero-knowledge-pam-plan.md` deleted (byte-identical to repo copy; repo is SSoT per ADR-0005). Constitution root docs created. ADR-0004 (DockerHub naming) and ADR-0005 (plan SSoT) added. Pre-commit + gitleaks wired up. CI extended with image build/push for `pwdmgr-api`. GitHub `origin` set, initial push, PR opened.
+- 2026-05-16: foundation session. Plan-doc duplicate at `C:/data/codex/enterprise-zero-knowledge-pam-plan.md` deleted (byte-identical to repo copy; repo is SSoT per ADR-0005). Constitution root docs created. ADR-0004 (DockerHub naming) and ADR-0005 (plan SSoT) added. Pre-commit + gitleaks wired up. CI extended with image build/push for `pwdmgr-api`. GitHub `origin` set, initial push, PR <https://github.com/dannybergt/pwdmgr/pull/1> opened.
+- 2026-05-16: three follow-up fix commits on the same branch resolved pre-existing CI breakage that surfaced on the first remote build:
+  - missing `Microsoft.Extensions.{DependencyInjection,Configuration,Hosting,Hosting.WindowsServices}` package references in `Pwdmgr.Application`, `Pwdmgr.Infrastructure`, `Pwdmgr.Agent.Service`;
+  - frontend `package-lock.json` generated and CI switched to `npm ci` (Constitution §10);
+  - frontend `tsconfig.json` moduleResolution moved to `Bundler` (was deprecated `Node`); `vite-env.d.ts` added for CSS side-effect imports;
+  - `*.tsbuildinfo` added to `.gitignore`.
+  All four CI jobs (`backend`, `frontend`, `secret-scan`, `docker-api`) green at commit `360f14e`.
