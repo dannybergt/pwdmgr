@@ -1,5 +1,9 @@
 # Dependency lifecycle per Constitution §10: lockfiles committed, versions pinned,
 # updates arrive as reviewable PRs instead of "latest" drifting silently.
+#
+# Major-version policy: platform-level majors (.NET runtime/SDK, TypeScript) are
+# coordinated migrations with an ADR, lifted across all projects at once — not
+# per-directory Dependabot bumps. They are ignored here; everything else flows.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -11,10 +15,17 @@ updates:
       frontend-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # TypeScript majors are lifted for frontend + extension together (see #11).
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /src/extension
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: nuget
     directory: /
     schedule:
@@ -23,6 +34,10 @@ updates:
       dotnet-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # Microsoft.* package majors track the .NET runtime major pinned in global.json.
+      - dependency-name: "Microsoft.*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -31,3 +46,7 @@ updates:
     directory: /infra/compose/docker
     schedule:
       interval: weekly
+    ignore:
+      # .NET base-image majors follow global.json, not Docker Hub (see #5, #8).
+      - dependency-name: mcr.microsoft.com/dotnet/*
+        update-types: ["version-update:semver-major"]
