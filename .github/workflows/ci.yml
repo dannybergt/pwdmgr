@@ -38,6 +38,22 @@ jobs:
         working-directory: src/frontend
         run: npm run build
 
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: src/extension/package-lock.json
+      - name: Install extension
+        working-directory: src/extension
+        run: npm ci
+      - name: Build extension
+        working-directory: src/extension
+        run: npm run build
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:
