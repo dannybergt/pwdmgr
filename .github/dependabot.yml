@@ -7,8 +7,10 @@ updates:
     schedule:
       interval: weekly
     groups:
-      frontend:
+      # minor/patch bundled into one PR; majors stay separate so they get a real review
+      frontend-minor-patch:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: npm
     directory: /src/extension
     schedule:
@@ -18,8 +20,9 @@ updates:
     schedule:
       interval: weekly
     groups:
-      dotnet:
+      dotnet-minor-patch:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
