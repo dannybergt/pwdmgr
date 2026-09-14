@@ -7,7 +7,7 @@ Last update: 2026-09-14
 ## Snapshot
 
 - **Phase:** project bootstrap. Planning is comprehensive (see [`docs/architecture/product-plan.md`](docs/architecture/product-plan.md)); no production code yet. Skeleton projects compile on CI.
-- **Branch:** `chore/pin-node-deps` (PR pending — see session log 2026-09-14). `main` at `22f105d`, CI green. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1).
+- **Branch:** `main` at `1595119` (PR [#3](https://github.com/dannybergt/pwdmgr/pull/3) squash-merged 2026-09-14 on `FREIGABE`). CI green on all five jobs. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1).
 - **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC).
 - **DockerHub namespace:** `dbergt`. **`dbergt/pwdmgr-api` is live** — first multi-arch push (`amd64` + `arm64`) at `:main` and `:sha-b41cfde`. <https://hub.docker.com/r/dbergt/pwdmgr-api>. Other images (`pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway`) follow with their respective service slices.
 
@@ -55,7 +55,7 @@ GitHub Actions secrets configured (verified 2026-05-16):
 - [ ] Decide trademark / domain status for the product working name `Privora` (ADR-0003).
 - [ ] Install .NET 9 SDK locally so `dotnet build` is possible without CI round-trip.
 - [ ] Decide on Docker Desktop vs. Rancher Desktop for local container work.
-- [x] `"latest"` pins in `src/frontend` and `src/extension` replaced by explicit versions; extension lockfile + CI job + Dependabot added (branch `chore/pin-node-deps`, 2026-09-14). Open: merge on `FREIGABE`.
+- [x] `"latest"` pins in `src/frontend` and `src/extension` replaced by explicit versions; extension lockfile + CI job + Dependabot added (PR #3, merged 2026-09-14 as `1595119`). Dependabot's first run started immediately after merge — expect a batch of update PRs (npm, NuGet, Actions, Docker) that need triage.
 - [ ] Frontend `package.json` lists `vite`, `typescript`, `@vitejs/plugin-react` under `dependencies`; they belong in `devDependencies`. Deliberately not moved in the pin PR (keeps that diff to what it claims). Do it with the first real frontend slice.
 - [ ] Extension is compiled with `tsc` only (no bundler); `moduleResolution: Bundler` is fine as long as `background.ts`/`content.ts` stay import-free. Revisit when a bundler is introduced.
 
@@ -75,4 +75,4 @@ GitHub Actions secrets configured (verified 2026-05-16):
   - `*.tsbuildinfo` added to `.gitignore`.
   All four CI jobs (`backend`, `frontend`, `secret-scan`, `docker-api`) green at commit `360f14e`.
 - 2026-05-16: PR #1 squash-merged to `main` as commit `b41cfde`. Maintainer configured `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets. Post-merge `push` event triggered the `docker-api` job which built multi-arch with QEMU (4:08) and pushed `dbergt/pwdmgr-api` to Docker Hub with tags `:main` and `:sha-b41cfde`. First image is live at <https://hub.docker.com/r/dbergt/pwdmgr-api>.
-- 2026-09-14: §10 clean-up session on host `dev-claude` (no `node`/`dotnet` on host; Node work runs in `node:24-alpine` containers). Branch `chore/pin-node-deps`: `"latest"` → caret ranges from the lockfile (frontend, no resolved version changed) and `^6.0.3` for the extension; first `src/extension/package-lock.json`. Pinning TypeScript 6 exposed that the extension never compiled: `moduleResolution: Node` deprecated (→ `Bundler`, like frontend) and TS 6 no longer auto-includes `@types` (→ `@types/chrome` + `types: ["chrome"]`). Added `extension` CI job and `.github/dependabot.yml` (npm×2, nuget, github-actions, docker). Verified `npm ci && npm run build` in container for both projects; gitleaks (v8.21.2, container) clean on staged changes.
+- 2026-09-14: §10 clean-up session on host `dev-claude` (no `node`/`dotnet` on host; Node work runs in `node:24-alpine` containers). Branch `chore/pin-node-deps`: `"latest"` → caret ranges from the lockfile (frontend, no resolved version changed) and `^6.0.3` for the extension; first `src/extension/package-lock.json`. Pinning TypeScript 6 exposed that the extension never compiled: `moduleResolution: Node` deprecated (→ `Bundler`, like frontend) and TS 6 no longer auto-includes `@types` (→ `@types/chrome` + `types: ["chrome"]`). Added `extension` CI job and `.github/dependabot.yml` (npm×2, nuget, github-actions, docker). Verified `npm ci && npm run build` in container for both projects; gitleaks (v8.21.2, container) clean on staged changes. `reviewer`: no blockers (one nit applied). `verifier`: 4/4 criteria proven with negative controls, no gaps. PR #3 opened, all five CI checks green, squash-merged to `main` as `1595119` on `FREIGABE`; no release tag (chore). Next: plan the first vertical MVP slice (crypto spike) via `planner`.
