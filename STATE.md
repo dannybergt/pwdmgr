@@ -7,7 +7,7 @@ Last update: 2026-09-14
 ## Snapshot
 
 - **Phase:** project bootstrap. Planning is comprehensive (see [`docs/architecture/product-plan.md`](docs/architecture/product-plan.md)); no production code yet. Skeleton projects compile on CI.
-- **Branch:** `main` at `1595119` (PR [#3](https://github.com/dannybergt/pwdmgr/pull/3) squash-merged 2026-09-14 on `FREIGABE`). CI green on all five jobs. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1).
+- **Branch:** `main`. 2026-09-14: PR [#3](https://github.com/dannybergt/pwdmgr/pull/3) (dependency pins) plus Dependabot batch (#4, #6, #7, #9, #10, #13, #15) and #12/#20 squash-merged on `FREIGABE`. CI green on all five jobs. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1).
 - **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC).
 - **DockerHub namespace:** `dbergt`. **`dbergt/pwdmgr-api` is live** — first multi-arch push (`amd64` + `arm64`) at `:main` and `:sha-b41cfde`. <https://hub.docker.com/r/dbergt/pwdmgr-api>. Other images (`pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway`) follow with their respective service slices.
 
@@ -50,7 +50,7 @@ GitHub Actions secrets configured (verified 2026-05-16):
 
 ## Open threads / next steps
 
-- [ ] First vertical MVP slice: pick scope — current candidate is crypto spike (Argon2id WASM + WebCrypto AES-GCM round-trip), tenant + user domain migration, ciphertext-only Secret CRUD API, React unlock flow.
+- [ ] First vertical MVP slice — **planned** 2026-09-14, see [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md) (9 slices, 4 ADRs). **Next: slice #1** (crypto primitives + Argon2id benchmark, `hash-wasm`, Vitest) and slice #2 (EF Core + Npgsql, Tenant/User, migration 0001) in parallel — both independent, #2 on the critical path.
 - [ ] Add Dockerfiles for `pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway` when their services have real content (do NOT add empty placeholder containers — see Constitution §2.5 YAGNI).
 - [ ] Decide trademark / domain status for the product working name `Privora` (ADR-0003).
 - [ ] Install .NET 9 SDK locally so `dotnet build` is possible without CI round-trip.
@@ -76,3 +76,4 @@ GitHub Actions secrets configured (verified 2026-05-16):
   All four CI jobs (`backend`, `frontend`, `secret-scan`, `docker-api`) green at commit `360f14e`.
 - 2026-05-16: PR #1 squash-merged to `main` as commit `b41cfde`. Maintainer configured `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets. Post-merge `push` event triggered the `docker-api` job which built multi-arch with QEMU (4:08) and pushed `dbergt/pwdmgr-api` to Docker Hub with tags `:main` and `:sha-b41cfde`. First image is live at <https://hub.docker.com/r/dbergt/pwdmgr-api>.
 - 2026-09-14: §10 clean-up session on host `dev-claude` (no `node`/`dotnet` on host; Node work runs in `node:24-alpine` containers). Branch `chore/pin-node-deps`: `"latest"` → caret ranges from the lockfile (frontend, no resolved version changed) and `^6.0.3` for the extension; first `src/extension/package-lock.json`. Pinning TypeScript 6 exposed that the extension never compiled: `moduleResolution: Node` deprecated (→ `Bundler`, like frontend) and TS 6 no longer auto-includes `@types` (→ `@types/chrome` + `types: ["chrome"]`). Added `extension` CI job and `.github/dependabot.yml` (npm×2, nuget, github-actions, docker). Verified `npm ci && npm run build` in container for both projects; gitleaks (v8.21.2, container) clean on staged changes. `reviewer`: no blockers (one nit applied). `verifier`: 4/4 criteria proven with negative controls, no gaps. PR #3 opened, all five CI checks green, squash-merged to `main` as `1595119` on `FREIGABE`; no release tag (chore). Next: plan the first vertical MVP slice (crypto spike) via `planner`.
+- 2026-09-14 (cont.): Dependabot first run triaged. Closed platform majors with rationale (#5/#8 .NET base images 9→10, #11/#14 TypeScript 6→7, #16/#17/#19 `Microsoft.Extensions.*` 9→10) and added `ignore` rules for them (#20). Routine bumps merged on `FREIGABE`: frontend minor/patch group (#13: react 19.3, vite 8.3, eslint 10.10), NuGet 9.0.0→9.0.20 (#15), Actions majors (#4 gitleaks-action v3, #6 checkout v7, #7 setup-dotnet v6, #9 setup-node v7, #10 setup-qemu v4). #7/#9 needed a `@dependabot rebase` after the `checkout` bump. `planner` produced the MVP slice plan → `docs/developer/mvp-slice-plan.md`. No release tag (no product code yet).
