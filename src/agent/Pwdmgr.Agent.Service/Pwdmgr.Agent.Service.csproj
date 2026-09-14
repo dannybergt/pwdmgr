@@ -3,8 +3,8 @@
     <UseWindowsService>true</UseWindowsService>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.20" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.20" />
   </ItemGroup>
 </Project>
 
