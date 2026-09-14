@@ -1,0 +1,33 @@
+# Dependency lifecycle per Constitution §10: lockfiles committed, versions pinned,
+# updates arrive as reviewable PRs instead of "latest" drifting silently.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /src/frontend
+    schedule:
+      interval: weekly
+    groups:
+      # minor/patch bundled into one PR; majors stay separate so they get a real review
+      frontend-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: npm
+    directory: /src/extension
+    schedule:
+      interval: weekly
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dotnet-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /infra/compose/docker
+    schedule:
+      interval: weekly
