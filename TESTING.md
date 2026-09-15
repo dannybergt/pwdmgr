@@ -183,17 +183,21 @@ the enrolment path, empty the vault tables of the dev database first (psql on th
 
 - `src/frontend/src/pages/*.test.tsx`, `src/session/vaultSession.test.ts` (Vitest + Testing
   Library, jsdom): login error/429 display and `credentials: include`, wrong passphrase rejected
-  with no request carrying it, enrolment validation, idle lock with fake timers (8 tests).
+  with no request carrying it, enrolment validation, idle lock with fake timers and storage/cookie/
+  IndexedDB spies, passphrase strength policy (zxcvbn, offline), vault recreated on unlock after an
+  interrupted enrolment (11 tests).
 - `src/frontend/e2e/vault.spec.ts` (Playwright, 2 tests): golden path + wrong passphrase, see
   above. Runs in the CI `e2e` job.
 
-- `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3, 18 tests): migrations `Identity` +
-  `Sessions` apply on a fresh database, second apply is a no-op, rollback to `0` and forward
+- `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3, 27 tests): migrations `Identity`, `Sessions`, `CryptoMetadata`, `Secrets`, `IntegrityConstraints` apply on a fresh database, second apply is a no-op, rollback to `0` and forward
   again; unique constraints `tenants(slug)`, `users(tenant_id, email)` (case-insensitive via
   `citext`), `local_credentials(user_id)`; composite FK rejects a credential pointing into
   another tenant; cascade of credentials on user delete; tenant query filter; Argon2id
-  hasher KATs (same frozen vectors as the browser), PHC parsing, decoy hash.
-- `tests/backend/Pwdmgr.Api.Tests` (xUnit v3 + `WebApplicationFactory`, 23 tests): login cookie
+  hasher KATs (same frozen vectors as the browser), PHC parsing, decoy hash; `CryptoConstraintTests`:
+  cross-tenant wrapped keys rejected by FK, user delete cascades sessions/keyring/wrapped keys, a
+  vault with secrets cannot be deleted, secret delete cascades versions, version uniqueness, blob
+  size checks, KDF floor enforced by the database.
+- `tests/backend/Pwdmgr.Api.Tests` (xUnit v3 + `WebApplicationFactory`, 33 tests): login cookie
   flags, case-insensitive e-mail, wrong password / unknown user / unknown tenant → 401 in the
   same latency class, `me` without or with garbage cookie → 401, logout revokes the row,
   **session expiry after a real 3-second TTL**, cross-origin POST → 403, storage holds only
@@ -203,7 +207,8 @@ the enrolment path, empty the vault tables of the dev database first (psql on th
   without echo, vault needs keyring, vault list per holder, cross-tenant invisibility; secret
   create/list/latest/new version/soft delete chain with client-chosen ids and version contract,
   foreign vault/secret → 404 (same and other tenant), 64 KiB payload limit → 413, malformed
-  fields → 400. Runs in CI. Verification catalogue:
+  fields → 400; account-wide failure budget across client addresses, session replacement on
+  login, no-store/nosniff/no Server header, per-user write limit. Runs in CI. Verification catalogue:
   [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
 - `src/frontend/src/crypto/*.test.ts` (Vitest): 52 tests — Argon2id KATs, two frozen own
   vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper

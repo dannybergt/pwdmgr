@@ -19,13 +19,13 @@ Last update: 2026-09-15
 | Frontend (React) | requires Node 24 | No `node` on host `dev-claude`; build via `docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/src/frontend:/w:z" -w /w node:24-alpine sh -c 'npm ci && npm test && npm run build'`. KDF benchmark in Chromium: see TESTING.md. |
 | Browser extension | requires Node 24 | Same container pattern with `src/extension`. |
 | Windows agent | requires .NET SDK | Same as backend. |
-| Docker Compose stack | requires Docker | Docker (native) on `dev-claude`; SELinux → bind mounts need `:z`. Started and verified 2026-09-15 (`docker compose -p pwdmgr up -d --build`). Traefik uses a file provider, no Docker socket. |
+| Docker Compose stack | requires Docker | Docker (native) on `dev-claude`; SELinux → bind mounts need `:z`. Project name fixed in the file (`name: pwdmgr`), credentials from `infra/compose/.env` (copy of `.env.example`; on this host the existing `pgdata` volume was initialised with the old dev value `pwdmgr-dev-only` for the Postgres password — set it in `.env` or recreate the volume). Traefik uses a file provider, no Docker socket; all four services have healthchecks and `restart: unless-stopped`. |
 
 ## Ports / shared resources (allocated)
 
 | Port / resource | Owner | Purpose |
 |---|---|---|
-| 8080 | `infra/compose/compose.yaml` (Traefik) | HTTP entrypoint (curl, localhost only for the client) — preflight-check before `docker compose up`. |
+| 8080 (127.0.0.1 only) | `infra/compose/compose.yaml` (Traefik) | HTTP entrypoint: `/health` plain, everything else 301 → https — preflight-check before `docker compose up`. |
 | 8443 | `infra/compose/compose.yaml` (Traefik) | HTTPS entrypoint, self-signed default cert — the web client needs this (secure context). |
 | internal `app` network | compose | API ↔ Traefik. |
 | internal `data` network | compose | API ↔ Postgres. |
@@ -60,6 +60,7 @@ GitHub Actions secrets configured (verified 2026-05-16):
 - [x] `dbergt/pwdmgr-web` Dockerfile (slice #9). `pwdmgr-worker` / `pwdmgr-agent-gateway` still only when they have real content (§2.5).
 - [ ] **Next after the merge:** post-MVP per ROADMAP — tenant/user onboarding without the dev seed (AP-015), vault sharing (wrap the vault key for another user's public key; the crypto is ready), audit events (AP-019), MFA, then the extension and the Windows agent. Decide the order in a new slice plan via `planner`.
 - [ ] Not solvable here: a real TLS certificate for a non-localhost deployment (operator: Traefik `tls.certificates`/ACME, OPERATIONS.md).
+- [ ] Follow-ups from the security/ops/migration reviews that are roadmap-sized, not MVP blockers: per-tenant storage quotas (AP-0xx), MFA, retention/purge for soft-deleted secret versions, Prometheus metrics (`/metrics` answers 418 until then), image pinning by digest (tags are pinned to minor/patch, Dependabot `docker-compose` added), NuGet lockfile (`RestorePackagesWithLockFile`) + `--locked-mode`, CodeQL job, composite primary keys to close the 409 existence oracle. Trigger: first slice plan after the MVP merge.
 - [ ] Decide trademark / domain status for the product working name `Privora` (ADR-0003).
 - [x] `dotnet build`/`dotnet test` run locally in the SDK container (TESTING.md); no host install needed.
 - [ ] Decide on Docker Desktop vs. Rancher Desktop for local container work.

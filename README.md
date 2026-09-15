@@ -11,15 +11,16 @@ Product working name: `Privora`
 
 ```sh
 cd infra/compose
-docker compose -p pwdmgr up -d --build     # ports 8080 (http) and 8443 (https, self-signed)
+cp .env.example .env                       # dev-only credentials (git-ignored)
+docker compose up -d --build               # https on 8443 (self-signed); http on 127.0.0.1:8080 redirects
 ```
 
 Open <https://localhost:8443/> (accept the self-signed certificate), sign in with the dev seed
-(tenant `dev`, `admin@dev.local`, password `dev-only-admin-password`), choose a vault
-passphrase — it never leaves the browser — and store your first secret. The API is reachable at
-`https://localhost:8443/api/v1/…`, health at `/health/ready`. Plain `http://localhost:8080`
-works for curl and on localhost only (WebCrypto needs a secure context). Test recipes without
-`node`/`dotnet` on the host: [TESTING.md](TESTING.md).
+(tenant `dev`, `admin@dev.local`, password = `SEED_ADMIN_PASSWORD` from your `.env`), choose a
+vault passphrase — it never leaves the browser — and store your first secret. The API is reachable
+at `https://localhost:8443/api/v1/…`, health at `/health/ready`. This stack is a development /
+evaluation configuration; do not expose it to a network as is ([OPERATIONS.md](OPERATIONS.md)).
+Test recipes without `node`/`dotnet` on the host: [TESTING.md](TESTING.md).
 
 ## Start here
 
