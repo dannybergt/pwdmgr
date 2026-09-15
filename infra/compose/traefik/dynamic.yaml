@@ -4,34 +4,60 @@
 #
 # TLS: the `websecure` entrypoint uses Traefik's built-in self-signed default certificate.
 # WebCrypto needs a secure context, so the web client is only usable over https (or on
-# localhost); production replaces the default certificate (OPERATIONS.md).
+# localhost); production replaces the default certificate (OPERATIONS.md). Plain http
+# (bound to 127.0.0.1 in compose) only serves /health and redirects everything else.
 http:
+  middlewares:
+    to-https:
+      redirectScheme:
+        scheme: https
+        port: "8443"
+        permanent: true
+    hsts:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
   routers:
+    pwdmgr-health-http:
+      rule: "PathPrefix(`/health`)"
+      entryPoints: [web]
+      service: pwdmgr-api
+      priority: 100
+    pwdmgr-redirect:
+      rule: "PathPrefix(`/`)"
+      entryPoints: [web]
+      middlewares: [to-https]
+      service: noop@internal
+      priority: 1
+    # No metrics endpoint yet (OPERATIONS.md): answer 404 instead of the SPA's 200.
+    pwdmgr-no-metrics:
+      rule: "PathPrefix(`/metrics`)"
+      entryPoints: [websecure]
+      service: noop@internal
+      priority: 100
+      tls: {}
     pwdmgr-api:
       rule: "PathPrefix(`/api`) || PathPrefix(`/health`)"
       entryPoints: [websecure]
+      middlewares: [hsts]
       service: pwdmgr-api
       tls: {}
-    pwdmgr-api-http:
-      rule: "PathPrefix(`/api`) || PathPrefix(`/health`)"
-      entryPoints: [web]
-      service: pwdmgr-api
     pwdmgr-web:
       rule: "PathPrefix(`/`)"
       entryPoints: [websecure]
+      middlewares: [hsts]
       service: pwdmgr-web
       priority: 1
       tls: {}
-    pwdmgr-web-http:
-      rule: "PathPrefix(`/`)"
-      entryPoints: [web]
-      service: pwdmgr-web
-      priority: 1
   services:
     pwdmgr-api:
       loadBalancer:
         servers:
           - url: "http://api:8080"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
     pwdmgr-web:
       loadBalancer:
         servers:
