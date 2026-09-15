@@ -21,6 +21,9 @@ updates:
         update-types: ["version-update:semver-major"]
       # Must match the mcr.microsoft.com/playwright image tag in ci.yml and TESTING.md; bump both by hand.
       - dependency-name: "@playwright/test"
+      # Tracks the Node major used everywhere (setup-node, node:24 build image, TESTING.md) — lifted together (see #38).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /src/extension
     schedule:
@@ -52,7 +55,15 @@ updates:
       # .NET base-image majors follow global.json, not Docker Hub (see #5, #8).
       - dependency-name: mcr.microsoft.com/dotnet/*
         update-types: ["version-update:semver-major"]
+      # Node majors are lifted with setup-node, @types/node and TESTING.md together (see #37).
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker-compose
     directory: /infra/compose
     schedule:
       interval: weekly
+    ignore:
+      # A Postgres major is a data-directory migration (pg_upgrade/dump-restore) planned in
+      # OPERATIONS.md, not a tag bump — postgres:18 also moved PGDATA and broke the volume (see #33).
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
