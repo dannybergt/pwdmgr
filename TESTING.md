@@ -2,7 +2,7 @@
 
 Status: living document — strategy and current state.
 
-Last update: 2026-05-16
+Last update: 2026-09-15
 
 ## Principles
 
@@ -32,7 +32,7 @@ Last update: 2026-05-16
 |---|---|---|---|
 | Pure functions / hooks | Unit | Vitest | yes |
 | Components | Component test | Vitest + Testing Library | yes |
-| Crypto round-trip (Argon2id KDF → AES-GCM) | Browser-realistic | Vitest with jsdom + WebCrypto + Argon2 WASM | yes |
+| Crypto primitives (Argon2id KDF, HKDF, AES-GCM) | Known-answer + round-trip | Vitest (Node 24 WebCrypto + `hash-wasm`), Chromium run for the KDF benchmark | yes |
 | Unlock flow (login → MFA → passphrase) | E2E | Playwright | yes |
 | Vault CRUD (ciphertext only over the wire) | E2E | Playwright | yes |
 
@@ -94,10 +94,38 @@ Every PR must:
 - Pass `dotnet build` for the backend solution.
 - Pass `npm run build` for the frontend.
 - Pass `gitleaks` scan.
-- Pass unit tests (when projects exist).
+- Pass `npm test` (frontend job, Vitest).
 
-The CI workflow currently in place ([.github/workflows/ci.yml](.github/workflows/ci.yml)) covers the build step. Test execution will be added as test projects come into the repo.
+## Frontend crypto tests and KDF benchmark
+
+`src/frontend/src/crypto/*.test.ts` run with `npm test` (Vitest, Node 24 — WebCrypto and the
+`hash-wasm` Argon2id build behave the same as in browsers; a real-browser run is still required
+for the benchmark, see below). Known-answer vectors:
+
+- Argon2id: seven vectors from the reference implementation's `src/test.c` (v=0x13, no secret,
+  no associated data) plus one frozen vector at `KDF_DEFAULT` — the cross-implementation anchor
+  for the .NET agent. RFC 9106 §5.3 is not used because its only Argon2id vector needs
+  associated data, which neither `hash-wasm` nor this KDF exposes.
+- HKDF-SHA256: RFC 5869 test cases 1 and 3.
+- AES-256-GCM: round-trip, tampered AAD / ciphertext / tag / wrong key → rejection, 10 000
+  distinct nonces.
+
+Benchmark (`npm run bench:kdf [runs]` in Node; `bench/kdf.html` in a browser) measures the
+m × t × p matrix from ADR-0006. Real-Chromium run on this host without `node`:
+
+```sh
+cd src/frontend
+docker network create pwdmgr-bench
+docker run -d --name pwdmgr-bench-web --network pwdmgr-bench -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  -e __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=pwdmgr-bench-web -v "$PWD:/w:z" -w /w node:24-alpine \
+  npx vite --host 0.0.0.0 --port 5173
+# then drive http://pwdmgr-bench-web:5173/bench/kdf.html?runs=5 from a Playwright container on the
+# same network and read <pre id="out"> once body[data-done="1"] is set.
+```
 
 ## Current state of tests
 
-- No test projects exist yet under `tests/backend` or `tests/frontend`. Placeholders to be added with the first vertical slice. Tracked in [STATE.md](STATE.md) → "Open threads".
+- `src/frontend/src/crypto/*.test.ts` (Vitest): 31 tests — Argon2id KATs, own frozen vector,
+  NFKC normalisation, HKDF KATs, AES-GCM round-trip and tamper cases, nonce uniqueness. Runs in CI.
+  Verification catalogue: [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
+- No backend test project yet (arrives with the persistence slice #2).

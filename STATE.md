@@ -2,11 +2,11 @@
 
 > Living, per-session document. Read at session start, update at session end. Source of truth for "what is running, what is open, what is next."
 
-Last update: 2026-09-14
+Last update: 2026-09-15
 
 ## Snapshot
 
-- **Phase:** project bootstrap. Planning is comprehensive (see [`docs/architecture/product-plan.md`](docs/architecture/product-plan.md)); no production code yet. Skeleton projects compile on CI.
+- **Phase:** MVP wave 1 in progress. Slice #1 (crypto primitives + Argon2id benchmark, ADR-0006) implemented on `feature/crypto-primitives`; slice #2 (persistence foundation, ADR-0007) on `feature/persistence-foundation`. Plan: [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md).
 - **Branch:** `main`. 2026-09-14: PR [#3](https://github.com/dannybergt/pwdmgr/pull/3) (dependency pins) plus Dependabot batch (#4, #6, #7, #9, #10, #13, #15) and #12/#20 squash-merged on `FREIGABE`. CI green on all five jobs. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1).
 - **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC).
 - **DockerHub namespace:** `dbergt`. **`dbergt/pwdmgr-api` is live** — first multi-arch push (`amd64` + `arm64`) at `:main` and `:sha-b41cfde`. <https://hub.docker.com/r/dbergt/pwdmgr-api>. Other images (`pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway`) follow with their respective service slices.
@@ -16,7 +16,7 @@ Last update: 2026-09-14
 | Component | Local build status | Notes |
 |---|---|---|
 | Backend (.NET 9) | requires .NET SDK 9.0.100 (pinned in `global.json`) | Not installed on this workstation; CI builds via `setup-dotnet@v4`. |
-| Frontend (React) | requires Node 24 | No `node` on host `dev-claude`; build via `docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/src/frontend:/w:z" -w /w node:24-alpine sh -c 'npm ci && npm run build'`. |
+| Frontend (React) | requires Node 24 | No `node` on host `dev-claude`; build via `docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/src/frontend:/w:z" -w /w node:24-alpine sh -c 'npm ci && npm test && npm run build'`. KDF benchmark in Chromium: see TESTING.md. |
 | Browser extension | requires Node 24 | Same container pattern with `src/extension`. |
 | Windows agent | requires .NET SDK | Same as backend. |
 | Docker Compose stack | requires Docker | Docker (native) available on `dev-claude`; SELinux → bind mounts need `:z`. Not yet started here. |
@@ -30,6 +30,7 @@ Last update: 2026-09-14
 | internal `data` network | compose | API ↔ Postgres. |
 | Postgres on `data` network | compose service `postgres` | not published to host. |
 | volume `pgdata` | compose | Postgres data. |
+| network `pwdmgr-bench`, container `pwdmgr-bench-web` (5173, not published) | KDF benchmark (TESTING.md) | transient; remove after the run. |
 
 No production environments allocated.
 
@@ -50,18 +51,19 @@ GitHub Actions secrets configured (verified 2026-05-16):
 
 ## Open threads / next steps
 
-- [ ] First vertical MVP slice — **planned** 2026-09-14, see [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md) (9 slices, 4 ADRs). **Next: slice #1** (crypto primitives + Argon2id benchmark, `hash-wasm`, Vitest) and slice #2 (EF Core + Npgsql, Tenant/User, migration 0001) in parallel — both independent, #2 on the critical path.
+- [ ] MVP slices per [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md). **#1 done** (PR pending): `src/frontend/src/crypto/{encoding,kdf,hkdf,aead}.ts`, 31 Vitest tests, benchmark, ADR-0006. **#2 done** (PR pending, separate branch). **Next: wave 2** — #3 keyring crypto (X25519, ADR-0009) ∥ #4 local login + sessions (ADR-0008).
 - [ ] Add Dockerfiles for `pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway` when their services have real content (do NOT add empty placeholder containers — see Constitution §2.5 YAGNI).
 - [ ] Decide trademark / domain status for the product working name `Privora` (ADR-0003).
 - [ ] Install .NET 9 SDK locally so `dotnet build` is possible without CI round-trip.
 - [ ] Decide on Docker Desktop vs. Rancher Desktop for local container work.
 - [x] `"latest"` pins in `src/frontend` and `src/extension` replaced by explicit versions; extension lockfile + CI job + Dependabot added (PR #3, merged 2026-09-14 as `1595119`). Dependabot's first run started immediately after merge — expect a batch of update PRs (npm, NuGet, Actions, Docker) that need triage.
-- [ ] Frontend `package.json` lists `vite`, `typescript`, `@vitejs/plugin-react` under `dependencies`; they belong in `devDependencies`. Deliberately not moved in the pin PR (keeps that diff to what it claims). Do it with the first real frontend slice.
+- [x] Frontend build tooling moved to `devDependencies` (slice #1).
+- [ ] `index.html` meta CSP carries `frame-ancestors`, which browsers ignore in `<meta>` (console warning). Move the CSP to response headers with the web image (slice #9).
 - [ ] Extension is compiled with `tsc` only (no bundler); `moduleResolution: Bundler` is fine as long as `background.ts`/`content.ts` stay import-free. Revisit when a bundler is introduced.
 
 ## Assumptions / decisions deferred
 
-- Argon2id parameters (memory cost, iterations, parallelism) will be benchmarked during the crypto spike; current placeholder is OWASP guidance (m=64MiB, t=3, p=4).
+- Argon2id parameters decided by benchmark: `KDF_DEFAULT` m=64 MiB, t=3, p=4; `KDF_MINIMUM` m=19 MiB, t=2, p=1 (ADR-0006). Per-device lower parameters for mobile are a later product decision.
 - OIDC/SAML federation: provider-side prep only; production-grade SSO is Phase 2.
 - Mobile apps: Phase 4+; not addressed in current code.
 
@@ -77,3 +79,4 @@ GitHub Actions secrets configured (verified 2026-05-16):
 - 2026-05-16: PR #1 squash-merged to `main` as commit `b41cfde`. Maintainer configured `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets. Post-merge `push` event triggered the `docker-api` job which built multi-arch with QEMU (4:08) and pushed `dbergt/pwdmgr-api` to Docker Hub with tags `:main` and `:sha-b41cfde`. First image is live at <https://hub.docker.com/r/dbergt/pwdmgr-api>.
 - 2026-09-14: §10 clean-up session on host `dev-claude` (no `node`/`dotnet` on host; Node work runs in `node:24-alpine` containers). Branch `chore/pin-node-deps`: `"latest"` → caret ranges from the lockfile (frontend, no resolved version changed) and `^6.0.3` for the extension; first `src/extension/package-lock.json`. Pinning TypeScript 6 exposed that the extension never compiled: `moduleResolution: Node` deprecated (→ `Bundler`, like frontend) and TS 6 no longer auto-includes `@types` (→ `@types/chrome` + `types: ["chrome"]`). Added `extension` CI job and `.github/dependabot.yml` (npm×2, nuget, github-actions, docker). Verified `npm ci && npm run build` in container for both projects; gitleaks (v8.21.2, container) clean on staged changes. `reviewer`: no blockers (one nit applied). `verifier`: 4/4 criteria proven with negative controls, no gaps. PR #3 opened, all five CI checks green, squash-merged to `main` as `1595119` on `FREIGABE`; no release tag (chore). Next: plan the first vertical MVP slice (crypto spike) via `planner`.
 - 2026-09-14 (cont.): Dependabot first run triaged. Closed platform majors with rationale (#5/#8 .NET base images 9→10, #11/#14 TypeScript 6→7, #16/#17/#19 `Microsoft.Extensions.*` 9→10) and added `ignore` rules for them (#20). Routine bumps merged on `FREIGABE`: frontend minor/patch group (#13: react 19.3, vite 8.3, eslint 10.10), NuGet 9.0.0→9.0.20 (#15), Actions majors (#4 gitleaks-action v3, #6 checkout v7, #7 setup-dotnet v6, #9 setup-node v7, #10 setup-qemu v4). #7/#9 needed a `@dependabot rebase` after the `checkout` bump. `planner` produced the MVP slice plan → `docs/developer/mvp-slice-plan.md`. No release tag (no product code yet).
+- 2026-09-15: wave 1 of the MVP slice plan, two worktrees in parallel. **Slice #1** (`feature/crypto-primitives`): `hash-wasm` 4.12.0 adopted (§10 check: MIT, zero deps, audit clean, last release 2024-11), `src/frontend/src/crypto/` with Argon2id KEK derivation (NFKC, salt ≥ 16 B, parameter floor), HKDF-SHA256 and AES-256-GCM via WebCrypto, Base64/hex helpers; Vitest wired into `npm test` and CI; 7 Argon2 reference vectors + 1 frozen own vector, RFC 5869 vectors, tamper tests, 10k-nonce check. Benchmark matrix in Node 24 and headless Chromium 153 (Playwright container against `vite dev`; needed `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS` because Vite 6+ rejects non-localhost `Host`). CSP `script-src` gained `'wasm-unsafe-eval'`. ADR-0006. TS 6 needs `Uint8Array<ArrayBuffer>` for WebCrypto `BufferSource` → exported `Bytes` type.
