@@ -127,3 +127,73 @@ public sealed class VerifierGateTests(SingleSlotApiFactory factory) : IClassFixt
         Assert.NotNull(response.Headers.RetryAfter);
     }
 }
+
+/// <summary>Distributed guessing: many client addresses against one account are stopped by the per-account failure budget.</summary>
+public sealed class AccountLockTests(AccountLockApiFactory factory) : IClassFixture<AccountLockApiFactory>
+{
+    private static readonly Uri Login = new("/api/v1/auth/login", UriKind.Relative);
+
+    [Fact]
+    public async Task Sixth_failed_attempt_from_a_sixth_address_is_429_and_a_correct_login_is_refused_until_the_window_passes()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        using var client = factory.CreateApiClient();
+        var email = $"target-{Guid.NewGuid():N}@example.test";
+        for (var i = 1; i <= 5; i += 1)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, Login) { Content = JsonContent.Create(new LoginRequest(ApiFactory.TenantSlug, email, "wrong")) };
+            request.Headers.Add("X-Forwarded-For", $"203.0.113.{i}");
+            Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(request, TestContext.Current.CancellationToken)).StatusCode);
+        }
+
+        using var sixth = new HttpRequestMessage(HttpMethod.Post, Login) { Content = JsonContent.Create(new LoginRequest(ApiFactory.TenantSlug, email, "wrong")) };
+        sixth.Headers.Add("X-Forwarded-For", "203.0.113.6");
+        var limited = await client.SendAsync(sixth, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+        Assert.NotNull(limited.Headers.RetryAfter);
+
+        // Another account from the same addresses is unaffected: the budget is per account.
+        using var other = new HttpRequestMessage(HttpMethod.Post, Login) { Content = JsonContent.Create(new LoginRequest(ApiFactory.TenantSlug, "someone-else@example.test", "wrong")) };
+        other.Headers.Add("X-Forwarded-For", "203.0.113.6");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(other, TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Successful_logins_do_not_consume_the_failure_budget()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        using var client = factory.CreateApiClient();
+        for (var i = 1; i <= 7; i += 1)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, Login) { Content = JsonContent.Create(new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, ApiFactory.Password)) };
+            request.Headers.Add("X-Forwarded-For", $"198.51.100.{i}");
+            var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            Assert.DoesNotContain("max-age", response.Headers.GetValues("Set-Cookie").Single(), StringComparison.OrdinalIgnoreCase);
+        }
+    }
+}
+
+/// <summary>Authenticated writes are token-bucketed per user.</summary>
+public sealed class WriteLimitTests(WriteLimitApiFactory factory) : IClassFixture<WriteLimitApiFactory>
+{
+    [Fact]
+    public async Task Fourth_write_in_a_minute_is_429_reads_are_not_limited()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        using var client = await factory.CreateAuthenticatedClientAsync($"writer-{Guid.NewGuid():N}@example.test");
+        var vaults = new Uri("/api/v1/vaults", UriKind.Relative);
+        HttpStatusCode last = default;
+        for (var i = 0; i < 4; i += 1)
+        {
+            // No keyring → 409 for the first three (still a counted write), then 429.
+            last = (await client.PostAsJsonAsync(vaults, new Vaults.CreateVaultRequest(Guid.NewGuid(), "personal", Convert.ToBase64String(new byte[40]), Convert.ToBase64String(new byte[92])), TestContext.Current.CancellationToken)).StatusCode;
+        }
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, last);
+        for (var i = 0; i < 5; i += 1)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(vaults, TestContext.Current.CancellationToken)).StatusCode);
+        }
+    }
+}

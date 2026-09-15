@@ -35,6 +35,7 @@ public static class AuthEndpoints
         HttpContext http,
         SessionService sessions,
         LoginThrottle throttle,
+        ICurrentUser currentUser,
         IOptions<AuthOptions> options,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
@@ -53,6 +54,13 @@ public static class AuthEndpoints
             return Results.Problem(statusCode: StatusCodes.Status429TooManyRequests, title: "Too many login attempts");
         }
 
+        if (!throttle.IsAccountOpen(request.TenantSlug, request.Email))
+        {
+            AuditLog.Login(logger, "account_throttled", request.TenantSlug, null, client);
+            http.Response.Headers.RetryAfter = ((int)throttle.FailureWindow.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Results.Problem(statusCode: StatusCodes.Status429TooManyRequests, title: "Too many failed attempts for this account");
+        }
+
         LoginResult? result;
         using (var slot = throttle.TryEnterVerifierGate())
         {
@@ -68,8 +76,15 @@ public static class AuthEndpoints
 
         if (result is null)
         {
+            await throttle.RecordFailureAsync(request.TenantSlug, request.Email, cancellationToken);
             AuditLog.Login(logger, "invalid_credentials", request.TenantSlug, null, client);
             return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials");
+        }
+
+        // A login from a browser that still holds a valid session replaces it.
+        if (currentUser.IsAuthenticated)
+        {
+            await sessions.RevokeAsync(currentUser.SessionId, cancellationToken);
         }
 
         AuditLog.Login(logger, "ok", request.TenantSlug, result, client);
@@ -85,7 +100,7 @@ public static class AuthEndpoints
             },
             SameSite = SameSiteMode.Strict,
             Path = "/",
-            MaxAge = options.Value.SessionTtl,
+            // No Max-Age: a session cookie dies with the browser; the server-side TTL is the hard limit.
             IsEssential = true
         });
         return Results.NoContent();

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pwdmgr.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Pwdmgr.Infrastructure.Persistence;
 namespace Pwdmgr.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PwdmgrDbContext))]
-    partial class PwdmgrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915110832_Secrets")]
+    partial class Secrets
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -97,16 +100,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_user_keyrings_tenant_id_user_id");
 
-                    b.ToTable("user_keyrings", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_user_keyrings_kdf_range", "kdf_memory_kib BETWEEN 19456 AND 1048576 AND kdf_iterations BETWEEN 2 AND 16 AND kdf_parallelism BETWEEN 1 AND 16");
-
-                            t.HasCheckConstraint("ck_user_keyrings_kdf_salt_len", "octet_length(kdf_salt) BETWEEN 16 AND 64");
-
-                            t.HasCheckConstraint("ck_user_keyrings_private_key_len", "octet_length(encrypted_private_key) BETWEEN 28 AND 4096");
-
-                            t.HasCheckConstraint("ck_user_keyrings_public_key_len", "octet_length(public_key) = 32");
-                        });
+                    b.ToTable("user_keyrings", (string)null);
                 });
 
             modelBuilder.Entity("Pwdmgr.Domain.Crypto.WrappedKey", b =>
@@ -161,25 +155,14 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_wrapped_keys");
 
-                    b.HasIndex("TenantId", "RecipientId")
-                        .HasDatabaseName("ix_wrapped_keys_tenant_id_recipient_id");
-
-                    b.HasIndex("TenantId", "ResourceId")
-                        .HasDatabaseName("ix_wrapped_keys_tenant_id_resource_id");
-
                     b.HasIndex("TenantId", "RecipientType", "RecipientId")
                         .HasDatabaseName("ix_wrapped_keys_tenant_id_recipient_type_recipient_id");
 
                     b.HasIndex("TenantId", "ResourceType", "ResourceId", "RecipientType", "RecipientId", "KeyVersion")
                         .IsUnique()
-                        .HasDatabaseName("ux_wrapped_keys_resource_recipient_version");
+                        .HasDatabaseName("ix_wrapped_keys_tenant_id_resource_type_resource_id_recipient_");
 
-                    b.ToTable("wrapped_keys", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_wrapped_keys_ciphertext_len", "octet_length(ciphertext) BETWEEN 60 AND 1024");
-
-                            t.HasCheckConstraint("ck_wrapped_keys_types", "resource_type = 1 AND recipient_type = 1");
-                        });
+                    b.ToTable("wrapped_keys", (string)null);
                 });
 
             modelBuilder.Entity("Pwdmgr.Domain.Identity.LocalCredential", b =>
@@ -342,10 +325,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "VaultId", "Status")
                         .HasDatabaseName("ix_secrets_tenant_id_vault_id_status");
 
-                    b.ToTable("secrets", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_secrets_name_len", "octet_length(name_ciphertext) BETWEEN 28 AND 1024");
-                        });
+                    b.ToTable("secrets", (string)null);
                 });
 
             modelBuilder.Entity("Pwdmgr.Domain.Secrets.SecretVersion", b =>
@@ -408,16 +388,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_secret_versions_tenant_id_secret_id_version_no");
 
-                    b.ToTable("secret_versions", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_secret_versions_aad_hash_len", "octet_length(aad_hash) = 32");
-
-                            t.HasCheckConstraint("ck_secret_versions_payload_len", "octet_length(payload_ciphertext) BETWEEN 28 AND 65536");
-
-                            t.HasCheckConstraint("ck_secret_versions_version_no", "version_no >= 1");
-
-                            t.HasCheckConstraint("ck_secret_versions_wrapped_dek_len", "octet_length(wrapped_dek) BETWEEN 60 AND 256");
-                        });
+                    b.ToTable("secret_versions", (string)null);
                 });
 
             modelBuilder.Entity("Pwdmgr.Domain.Sessions.Session", b =>
@@ -467,10 +438,6 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                     b.HasIndex("ExpiresAt")
                         .HasDatabaseName("ix_sessions_expires_at");
 
-                    b.HasIndex("RevokedAt")
-                        .HasDatabaseName("ix_sessions_revoked_at")
-                        .HasFilter("revoked_at IS NOT NULL");
-
                     b.HasIndex("TokenHash")
                         .IsUnique()
                         .HasDatabaseName("ix_sessions_token_hash");
@@ -478,10 +445,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "UserId")
                         .HasDatabaseName("ix_sessions_tenant_id_user_id");
 
-                    b.ToTable("sessions", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_sessions_token_hash_len", "octet_length(token_hash) = 32");
-                        });
+                    b.ToTable("sessions", (string)null);
                 });
 
             modelBuilder.Entity("Pwdmgr.Domain.Tenants.Tenant", b =>
@@ -575,10 +539,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Status")
                         .HasDatabaseName("ix_vaults_tenant_id_status");
 
-                    b.ToTable("vaults", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_vaults_name_len", "octet_length(name_ciphertext) BETWEEN 28 AND 1024");
-                        });
+                    b.ToTable("vaults", (string)null);
                 });
 
             modelBuilder.Entity("Pwdmgr.Domain.Crypto.UserKeyring", b =>
@@ -607,22 +568,6 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_wrapped_keys_tenants_tenant_id");
-
-                    b.HasOne("Pwdmgr.Domain.Identity.User", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "RecipientId")
-                        .HasPrincipalKey("TenantId", "Id")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_wrapped_keys_users_tenant_id_recipient_id");
-
-                    b.HasOne("Pwdmgr.Domain.Vaults.Vault", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId", "ResourceId")
-                        .HasPrincipalKey("TenantId", "Id")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_wrapped_keys_vaults_tenant_id_resource_id");
                 });
 
             modelBuilder.Entity("Pwdmgr.Domain.Identity.LocalCredential", b =>

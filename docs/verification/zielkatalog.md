@@ -83,3 +83,14 @@ It does not recur on restart.
 | P5-06 | Server stores only opaque blobs | `psql`: `user_keyrings.public_key`, `encrypted_private_key`, `vaults.name_ciphertext`, `wrapped_keys.ciphertext` are `bytea`; no plaintext columns; `\d wrapped_keys` has `crypto_version` and the unique index over (tenant, resource, recipient, key_version) | L3 | psql | — | OPEN |
 | P5-07 | Malformed input rejected without echo | 31-byte public key / non-base64 salt → 400 naming the field, response body does not contain the submitted value | L1 | curl | — | OPEN |
 
+## Slice #6 — secret API (ciphertext-only, versioned)
+
+| ID | Goal (source) | Observable criterion | Layer | Proof step | Negative control | Status |
+|---|---|---|---|---|---|---|
+| P6-01 | API tests green (mvp-slice-plan.md, slice #6) | `Pwdmgr.Api.Tests` 21 passed incl. `SecretTests`; migration `Secrets` applied by `MigrationTests` | L3 | SDK container `dotnet test` | `CI=true` without variable → Failed | OPEN |
+| P6-02 | curl chain create → list → latest → new version → delete | `POST /vaults/{id}/secrets` 201 v1; `GET` list contains it; `GET /secrets/{id}/versions/latest` returns v1 blobs; `POST /secrets/{id}/versions` 201 v2 and latest = v2; `DELETE` 204, then latest 404 and list empty; psql keeps both `secret_versions` rows (soft delete) | L1 + L3 | compose stack, curl with the dev seed user after keyring + vault | PUT on a version → 404/405 | OPEN |
+| P6-03 | Foreign vault / secret is 404 | second user (created via psql + login) gets 404 on list/create/latest/new version/delete of the first user's vault and secret; random vault id → 404 | L1 | curl | own vault → 200/201 | OPEN |
+| P6-04 | Payload limit at the boundary | `payloadCiphertext` of 64 KiB + 1 → 413; 64 KiB → 201 | L1 | curl | — | OPEN |
+| P6-05 | `aad_hash` stored as delivered | psql `encode(aad_hash,'base64')` equals the request field | L3 | psql | — | OPEN |
+| P6-06 | **Plaintext marker never reaches the server** | verifier encrypts a known marker string client-side with `sealSecretPayload` from `src/frontend/src/crypto/keyring.ts` (tsx in `node:24-alpine`), uploads the blobs, then greps the whole database dump (`pg_dump`), the API logs and the Traefik logs for the marker → 0 hits; decrypting the downloaded blobs client-side yields the marker again | L3 | tsx + curl + `pg_dump | grep` | grep for the base64 payload prefix hits the dump (the grep works) | OPEN |
+

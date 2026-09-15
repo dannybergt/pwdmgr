@@ -174,8 +174,10 @@ works either way (`hash-wasm` does not need `crypto.subtle`).
   hashes, rate limit → 429 (own fixture with 5 permits), per-client spraying window → 429,
   verifier gate → 503, disabled user locks out sessions, idempotent logout, session purge keeps
   recent rows; keyring enrolment write-once, KDF floor/ceiling → 400, malformed fields → 400
-  without echo, vault needs keyring, vault list per holder, cross-tenant invisibility. Runs in
-  CI. Verification catalogue:
+  without echo, vault needs keyring, vault list per holder, cross-tenant invisibility; secret
+  create/list/latest/new version/soft delete chain with client-chosen ids and version contract,
+  foreign vault/secret → 404 (same and other tenant), 64 KiB payload limit → 413, malformed
+  fields → 400. Runs in CI. Verification catalogue:
   [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
 - `src/frontend/src/crypto/*.test.ts` (Vitest): 52 tests — Argon2id KATs, two frozen own
   vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper

@@ -22,5 +22,7 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<Session>
         builder.HasIndex(s => s.TokenHash).IsUnique();
         builder.HasIndex(s => new { s.TenantId, s.UserId });
         builder.HasIndex(s => s.ExpiresAt);
+        builder.HasIndex(s => s.RevokedAt).HasFilter("revoked_at IS NOT NULL");
+        builder.ToTable(t => t.HasCheckConstraint("ck_sessions_token_hash_len", $"octet_length(token_hash) = {Session.TokenHashLength}"));
     }
 }

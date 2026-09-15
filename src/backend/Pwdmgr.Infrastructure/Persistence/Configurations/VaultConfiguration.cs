@@ -17,5 +17,6 @@ internal sealed class VaultConfiguration : IEntityTypeConfiguration<Vault>
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(v => v.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(v => new { v.TenantId, v.Status });
+        builder.ToTable(t => t.HasCheckConstraint("ck_vaults_name_len", $"octet_length(name_ciphertext) BETWEEN 28 AND {Vault.NameCiphertextMaxLength}"));
     }
 }

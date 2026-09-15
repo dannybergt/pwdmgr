@@ -89,6 +89,33 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
     }
 
     [Fact]
+    public async Task Login_with_a_live_session_replaces_it()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        using var client = factory.CreateApiClient();
+        var first = await LoginAsync(client);
+        using var again = new HttpRequestMessage(HttpMethod.Post, Login) { Content = JsonContent.Create(new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, ApiFactory.Password)) };
+        again.Headers.Add("Cookie", first);
+        var response = await client.SendAsync(again, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var me = new HttpRequestMessage(HttpMethod.Get, Me);
+        me.Headers.Add("Cookie", first);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(me, TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Api_responses_carry_no_store_and_nosniff_and_no_server_header()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        using var client = factory.CreateApiClient();
+        var response = await client.GetAsync(new Uri("/api/v1/platform/info", UriKind.Relative), TestContext.Current.CancellationToken);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.False(response.Headers.Contains("Server"));
+    }
+
+    [Fact]
     public async Task Logout_revokes_the_session_server_side()
     {
         PostgresDatabase.SkipUnlessConfigured();

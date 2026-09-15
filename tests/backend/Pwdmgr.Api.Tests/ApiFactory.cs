@@ -41,6 +41,13 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     protected virtual int MaxConcurrentVerifications => 8;
 
+    protected virtual int LoginFailuresPerAccount => 1000;
+
+    protected virtual int WriteRequestsPerMinute => 10000;
+
+    /// <summary>Trust X-Forwarded-For from the in-process test client so client-address partitioning can be exercised.</summary>
+    protected virtual bool TrustForwardedHeaders => false;
+
     public async ValueTask InitializeAsync()
     {
         await database.InitializeAsync();
@@ -83,6 +90,14 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Auth:LoginRateLimitPermits", LoginRateLimitPermits.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Auth:LoginRateLimitPermitsPerClient", LoginRateLimitPermitsPerClient.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Auth:MaxConcurrentVerifications", MaxConcurrentVerifications.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        builder.UseSetting("Auth:LoginFailuresPerAccount", LoginFailuresPerAccount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        builder.UseSetting("Auth:WriteRequestsPerMinute", WriteRequestsPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (TrustForwardedHeaders)
+        {
+            // The TestServer has no remote address; trusting "everything" lets X-Forwarded-For become the client.
+            builder.UseSetting("Forwarded:KnownNetworks:0", "0.0.0.0/0");
+            builder.UseSetting("Forwarded:KnownNetworks:1", "::/0");
+        }
         builder.UseSetting("Auth:LoginRateLimitWindow", "00:10:00");
         builder.UseSetting("Seed:Enabled", "false");
     }
@@ -165,4 +180,18 @@ public sealed class SingleSlotApiFactory : ApiFactory
 public sealed class ShortTtlApiFactory : ApiFactory
 {
     public override TimeSpan SessionTtl => TimeSpan.FromSeconds(3);
+}
+
+/// <summary>Per-account failure budget of 5 and forwarded headers trusted, for the distributed-guessing test.</summary>
+public sealed class AccountLockApiFactory : ApiFactory
+{
+    protected override int LoginFailuresPerAccount => 5;
+
+    protected override bool TrustForwardedHeaders => true;
+}
+
+/// <summary>Three writes per minute, for the write rate-limit test.</summary>
+public sealed class WriteLimitApiFactory : ApiFactory
+{
+    protected override int WriteRequestsPerMinute => 3;
 }
