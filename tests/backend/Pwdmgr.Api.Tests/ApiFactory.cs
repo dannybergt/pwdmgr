@@ -166,8 +166,3 @@ public sealed class ShortTtlApiFactory : ApiFactory
 {
     public override TimeSpan SessionTtl => TimeSpan.FromSeconds(3);
 }
-
-public sealed class ShortTtlApiFactory : ApiFactory
-{
-    public override TimeSpan SessionTtl => TimeSpan.FromSeconds(3);
-}
