@@ -174,7 +174,8 @@ docker run --rm --network host --ipc=host -u "$(id -u):$(id -g)" -e HOME=/tmp -v
   mcr.microsoft.com/playwright:v1.63.0-noble sh -c 'npm ci --no-fund --ignore-scripts && npx playwright test'
 ```
 
-Defaults: `E2E_BASE_URL=https://localhost:8443`, the dev seed user, a deterministic
+Defaults: `E2E_BASE_URL=https://localhost:8443`, the dev seed user (`E2E_PASSWORD` must equal
+`SEED_ADMIN_PASSWORD` from `infra/compose/.env`; CI passes it through), a deterministic
 `E2E_PASSPHRASE` so repeated runs against the same dev database take the unlock path. To force
 the enrolment path, empty the vault tables of the dev database first (psql on the compose
 `postgres` service: `user_keyrings`, `vaults`, `wrapped_keys`, `secrets`, `secret_versions`).

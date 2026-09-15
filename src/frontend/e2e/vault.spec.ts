@@ -9,6 +9,7 @@ import { expect, test, type Page, type Request } from "@playwright/test";
 const baseUrl = process.env.E2E_BASE_URL ?? "https://localhost:8443";
 const tenant = process.env.E2E_TENANT ?? "dev";
 const email = process.env.E2E_EMAIL ?? "admin@dev.local";
+// Must equal SEED_ADMIN_PASSWORD from infra/compose/.env (CI passes it through).
 const loginSecret = process.env.E2E_PASSWORD ?? "dev-only-admin-password";
 // Deterministic so repeated runs against the same dev database can unlock again.
 const passphrase = process.env.E2E_PASSPHRASE ?? "e2e dev-seed passphrase 2026";

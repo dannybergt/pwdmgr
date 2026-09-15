@@ -223,6 +223,7 @@ jobs:
       - name: Run the Playwright golden path against https://localhost:8443
         run: |
           docker run --rm --network host --ipc=host -v "$PWD/src/frontend:/w" -w /w \
+            -e E2E_PASSWORD="$(sed -n 's/^SEED_ADMIN_PASSWORD=//p' infra/compose/.env)" \
             mcr.microsoft.com/playwright:v1.63.0-noble sh -c 'npm ci --no-fund --ignore-scripts && npx playwright test'
       - name: Stack logs on failure
         if: failure()
