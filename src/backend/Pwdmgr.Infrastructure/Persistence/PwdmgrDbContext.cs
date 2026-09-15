@@ -3,6 +3,7 @@ using Pwdmgr.Application.Auth;
 using Pwdmgr.Domain.Common;
 using Pwdmgr.Domain.Crypto;
 using Pwdmgr.Domain.Identity;
+using Pwdmgr.Domain.Secrets;
 using Pwdmgr.Domain.Sessions;
 using Pwdmgr.Domain.Tenants;
 using Pwdmgr.Domain.Vaults;
@@ -24,6 +25,10 @@ public sealed class PwdmgrDbContext(DbContextOptions<PwdmgrDbContext> options, I
     public DbSet<Vault> Vaults => Set<Vault>();
 
     public DbSet<WrappedKey> WrappedKeys => Set<WrappedKey>();
+
+    public DbSet<Secret> Secrets => Set<Secret>();
+
+    public DbSet<SecretVersion> SecretVersions => Set<SecretVersion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
