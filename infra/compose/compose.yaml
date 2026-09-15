@@ -2,10 +2,12 @@ services:
   reverse-proxy:
     image: traefik:v3
     command:
-      - --providers.docker=true
+      - --providers.file.filename=/etc/traefik/dynamic.yaml
       - --entrypoints.web.address=:8080
     ports:
       - "8080:8080"
+    volumes:
+      - ./traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro,z
     networks:
       - public
       - app
@@ -19,14 +21,13 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Postgres: Host=postgres;Database=pwdmgr;Username=pwdmgr;Password=pwdmgr-dev-only
+      Database__MigrateOnStartup: "true"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - app
       - data
-    labels:
-      - traefik.http.routers.pwdmgr-api.rule=PathPrefix(`/api`) || PathPrefix(`/health`)
-      - traefik.http.services.pwdmgr-api.loadbalancer.server.port=8080
 
   postgres:
     image: postgres:16
@@ -36,6 +37,11 @@ services:
       POSTGRES_PASSWORD: pwdmgr-dev-only
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pwdmgr -d pwdmgr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - data
 
