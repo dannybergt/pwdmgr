@@ -103,12 +103,13 @@ Every PR must:
 for the benchmark, see below). Known-answer vectors:
 
 - Argon2id: seven vectors from the reference implementation's `src/test.c` (v=0x13, no secret,
-  no associated data) plus one frozen vector at `KDF_DEFAULT` — the cross-implementation anchor
-  for the .NET agent. RFC 9106 §5.3 is not used because its only Argon2id vector needs
-  associated data, which neither `hash-wasm` nor this KDF exposes.
+  no associated data) plus two frozen vectors at `KDF_DEFAULT` (ASCII and NFKC-sensitive),
+  cross-checked with argon2-cffi — the cross-implementation anchor for the .NET agent. RFC 9106
+  §5.3 is not used because its only Argon2id vector needs associated data, which neither
+  `hash-wasm` nor this KDF exposes.
 - HKDF-SHA256: RFC 5869 test cases 1 and 3.
-- AES-256-GCM: round-trip, tampered AAD / ciphertext / tag / wrong key → rejection, 10 000
-  distinct nonces.
+- AES-256-GCM: round-trip, tampered AAD / ciphertext / tag / wrong key → rejection, 1 000
+  distinct nonces (RNG sanity only).
 
 Benchmark (`npm run bench:kdf [runs]` in Node; `bench/kdf.html` in a browser) measures the
 m × t × p matrix from ADR-0006. Real-Chromium run on this host without `node`:
@@ -125,7 +126,8 @@ docker run -d --name pwdmgr-bench-web --network pwdmgr-bench -u "$(id -u):$(id -
 
 ## Current state of tests
 
-- `src/frontend/src/crypto/*.test.ts` (Vitest): 31 tests — Argon2id KATs, own frozen vector,
-  NFKC normalisation, HKDF KATs, AES-GCM round-trip and tamper cases, nonce uniqueness. Runs in CI.
+- `src/frontend/src/crypto/*.test.ts` (Vitest): 39 tests — Argon2id KATs, two frozen own
+  vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper
+  cases, nonce uniqueness. Runs in CI.
   Verification catalogue: [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
 - No backend test project yet (arrives with the persistence slice #2).
