@@ -37,6 +37,10 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>Login attempts per client+e-mail in a 10-minute window; the rate-limit test lowers this.</summary>
     protected virtual int LoginRateLimitPermits => 1000;
 
+    protected virtual int LoginRateLimitPermitsPerClient => 10000;
+
+    protected virtual int MaxConcurrentVerifications => 8;
+
     public async ValueTask InitializeAsync()
     {
         await database.InitializeAsync();
@@ -77,6 +81,8 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Auth:SessionTtl", SessionTtl.ToString());
         builder.UseSetting("Auth:CookieSecurePolicy", "Always");
         builder.UseSetting("Auth:LoginRateLimitPermits", LoginRateLimitPermits.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        builder.UseSetting("Auth:LoginRateLimitPermitsPerClient", LoginRateLimitPermitsPerClient.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        builder.UseSetting("Auth:MaxConcurrentVerifications", MaxConcurrentVerifications.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Auth:LoginRateLimitWindow", "00:10:00");
         builder.UseSetting("Seed:Enabled", "false");
     }
@@ -141,9 +147,19 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     private static readonly string SharedHash = new Infrastructure.Auth.Argon2PasswordHasher().Hash(Password);
 }
 
+
 public sealed class StrictRateLimitApiFactory : ApiFactory
 {
     protected override int LoginRateLimitPermits => 5;
+
+    protected override int LoginRateLimitPermitsPerClient => 8;
+
+    protected override int MaxConcurrentVerifications => 1;
+}
+
+public sealed class SingleSlotApiFactory : ApiFactory
+{
+    protected override int MaxConcurrentVerifications => 1;
 }
 
 public sealed class ShortTtlApiFactory : ApiFactory

@@ -20,6 +20,7 @@ public sealed record SessionPrincipal(Guid TenantId, Guid UserId, Guid SessionId
 public sealed class SessionService(PwdmgrDbContext db, IPasswordHasher hasher, TimeProvider clock)
 {
     private const int TokenLength = 32;
+    private static readonly TimeSpan LastSeenGranularity = TimeSpan.FromMinutes(1);
 
     public async Task<LoginResult?> LoginAsync(string tenantSlug, string email, string password, TimeSpan ttl, CancellationToken cancellationToken)
     {
@@ -73,15 +74,25 @@ public sealed class SessionService(PwdmgrDbContext db, IPasswordHasher hasher, T
 
         var hash = SHA256.HashData(raw);
         var now = clock.GetUtcNow();
+        // Revocation must be immediate: a disabled user or tenant invalidates every session
+        // on its next request, not only at the next login.
         var session = await db.Sessions.IgnoreQueryFilters()
-            .SingleOrDefaultAsync(s => s.TokenHash == hash, cancellationToken);
+            .Where(s => s.TokenHash == hash)
+            .Join(db.Users.IgnoreQueryFilters().Where(u => u.Status == UserStatus.Active), s => s.UserId, u => u.Id, (s, _) => s)
+            .Join(db.Tenants.Where(t => t.Status == TenantStatus.Active), s => s.TenantId, t => t.Id, (s, _) => s)
+            .SingleOrDefaultAsync(cancellationToken);
         if (session is null || !session.IsActive(now))
         {
             return null;
         }
 
-        session.LastSeenAt = now;
-        await db.SaveChangesAsync(cancellationToken);
+        // Coarse last-seen: one write per minute per session instead of one per request.
+        if (now - session.LastSeenAt >= LastSeenGranularity)
+        {
+            session.LastSeenAt = now;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         return new SessionPrincipal(session.TenantId, session.UserId, session.Id);
     }
 

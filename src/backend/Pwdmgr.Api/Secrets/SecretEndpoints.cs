@@ -8,9 +8,11 @@ using Pwdmgr.Infrastructure.Persistence;
 
 namespace Pwdmgr.Api.Secrets;
 
-public sealed record CreateSecretRequest(string Type, string NameCiphertext, string PayloadCiphertext, string WrappedDek, string AadHash);
+/// <summary><paramref name="Id"/> is chosen by the client so the AAD can bind it before the server sees the secret (ADR-0009).</summary>
+public sealed record CreateSecretRequest(Guid Id, string Type, string NameCiphertext, string PayloadCiphertext, string WrappedDek, string AadHash);
 
-public sealed record NewVersionRequest(string PayloadCiphertext, string WrappedDek, string AadHash, string? NameCiphertext);
+/// <summary><paramref name="VersionNo"/> must be the latest + 1: the client sealed the payload with that number in the AAD, so the server never renumbers.</summary>
+public sealed record NewVersionRequest(int VersionNo, string PayloadCiphertext, string WrappedDek, string AadHash);
 
 public sealed record SecretSummaryDto(Guid Id, Guid VaultId, string Type, string NameCiphertext, int LatestVersionNo, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt);
 
@@ -41,10 +43,7 @@ public static class SecretEndpoints
     }
 
     private static IQueryable<Vault> AccessibleVaults(PwdmgrDbContext db, ICurrentUser user) =>
-        db.WrappedKeys
-            .Where(w => w.ResourceType == WrappedKeyResourceType.Vault && w.RecipientType == WrappedKeyRecipientType.User && w.RecipientId == user.UserId)
-            .Join(db.Vaults.Where(v => v.Status == VaultStatus.Active), w => w.ResourceId, v => v.Id, (w, v) => v)
-            .Distinct();
+        VaultEndpoints.AccessibleVaults(db, user, (_, v) => v);
 
     private static async Task<IResult> ListAsync(Guid vaultId, ICurrentUser user, PwdmgrDbContext db, CancellationToken cancellationToken)
     {
@@ -69,17 +68,25 @@ public static class SecretEndpoints
             errors["type"] = [$"one of {string.Join(", ", Types)}"];
         }
 
+        if (request.Id == Guid.Empty)
+        {
+            errors["id"] = ["client-generated random UUID required"];
+        }
+
         if (!Base64Field.TryDecode(request.NameCiphertext, MinPayloadLength, Secret.NameCiphertextMaxLength, out var name))
         {
             errors["nameCiphertext"] = [$"base64 of {MinPayloadLength}..{Secret.NameCiphertextMaxLength} bytes"];
         }
 
+        if (IsPayloadTooLarge(request.PayloadCiphertext))
+        {
+            return PayloadTooLarge();
+        }
+
         var payloadResult = ValidateVersion(request.PayloadCiphertext, request.WrappedDek, request.AadHash, errors);
         if (errors.Count > 0)
         {
-            return errors.ContainsKey("payloadCiphertext") && errors["payloadCiphertext"][0].StartsWith("too large", StringComparison.Ordinal)
-                ? Results.Problem(statusCode: StatusCodes.Status413PayloadTooLarge, title: "Payload too large", detail: $"max {SecretVersion.PayloadMaxLength} bytes")
-                : Results.ValidationProblem(errors);
+            return Results.ValidationProblem(errors);
         }
 
         if (!await AccessibleVaults(db, user).AnyAsync(v => v.Id == vaultId, cancellationToken))
@@ -87,9 +94,14 @@ public static class SecretEndpoints
             return Results.NotFound();
         }
 
+        if (await db.Secrets.IgnoreQueryFilters().AnyAsync(s => s.Id == request.Id, cancellationToken))
+        {
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Secret id already exists");
+        }
+
         var secret = new Secret
         {
-            Id = Guid.NewGuid(),
+            Id = request.Id,
             TenantId = tenant.TenantId,
             VaultId = vaultId,
             Type = request.Type!,
@@ -98,8 +110,16 @@ public static class SecretEndpoints
         var version = NewVersion(secret, 1, payloadResult, tenant.TenantId, user.UserId);
         db.Secrets.Add(secret);
         db.SecretVersions.Add(version);
-        await db.SaveChangesAsync(cancellationToken);
-        return Results.Created($"/api/v1/secrets/{secret.Id}/versions/latest", ToDto(version));
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Secret id already exists");
+        }
+
+        return Results.Created($"/api/v1/secrets/{secret.Id}/versions/latest", ToDto(version, secret.VaultId));
     }
 
     private static async Task<IResult> LatestAsync(Guid secretId, ICurrentUser user, PwdmgrDbContext db, CancellationToken cancellationToken)
@@ -111,24 +131,26 @@ public static class SecretEndpoints
         }
 
         var version = await db.SecretVersions.SingleAsync(v => v.SecretId == secretId && v.VersionNo == secret.LatestVersionNo, cancellationToken);
-        return Results.Ok(ToDto(version));
+        return Results.Ok(ToDto(version, secret.VaultId));
     }
 
     private static async Task<IResult> AddVersionAsync(Guid secretId, NewVersionRequest request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string[]>();
-        byte[]? name = null;
-        if (request.NameCiphertext is not null && !Base64Field.TryDecode(request.NameCiphertext, MinPayloadLength, Secret.NameCiphertextMaxLength, out name))
+        if (request.VersionNo < 2)
         {
-            errors["nameCiphertext"] = [$"base64 of {MinPayloadLength}..{Secret.NameCiphertextMaxLength} bytes"];
+            errors["versionNo"] = ["must be the latest version + 1"];
+        }
+
+        if (IsPayloadTooLarge(request.PayloadCiphertext))
+        {
+            return PayloadTooLarge();
         }
 
         var payloadResult = ValidateVersion(request.PayloadCiphertext, request.WrappedDek, request.AadHash, errors);
         if (errors.Count > 0)
         {
-            return errors.ContainsKey("payloadCiphertext") && errors["payloadCiphertext"][0].StartsWith("too large", StringComparison.Ordinal)
-                ? Results.Problem(statusCode: StatusCodes.Status413PayloadTooLarge, title: "Payload too large", detail: $"max {SecretVersion.PayloadMaxLength} bytes")
-                : Results.ValidationProblem(errors);
+            return Results.ValidationProblem(errors);
         }
 
         var secret = await FindAccessibleAsync(db, user, secretId, cancellationToken);
@@ -137,17 +159,27 @@ public static class SecretEndpoints
             return Results.NotFound();
         }
 
-        secret.LatestVersionNo += 1;
-        secret.UpdatedAt = DateTimeOffset.UtcNow;
-        if (name is not null)
+        // The client sealed the payload with this version number in the AAD; a stale client
+        // (someone else added a version meanwhile) gets 409 and must re-read, never a renumber.
+        if (request.VersionNo != secret.LatestVersionNo + 1)
         {
-            secret.NameCiphertext = name;
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Version conflict", detail: $"latest is {secret.LatestVersionNo}");
         }
 
-        var version = NewVersion(secret, secret.LatestVersionNo, payloadResult, tenant.TenantId, user.UserId);
+        secret.LatestVersionNo = request.VersionNo;
+        secret.UpdatedAt = DateTimeOffset.UtcNow;
+        var version = NewVersion(secret, request.VersionNo, payloadResult, tenant.TenantId, user.UserId);
         db.SecretVersions.Add(version);
-        await db.SaveChangesAsync(cancellationToken);
-        return Results.Created($"/api/v1/secrets/{secret.Id}/versions/latest", ToDto(version));
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Version conflict");
+        }
+
+        return Results.Created($"/api/v1/secrets/{secret.Id}/versions/latest", ToDto(version, secret.VaultId));
     }
 
     private static async Task<IResult> DeleteAsync(Guid secretId, ICurrentUser user, PwdmgrDbContext db, CancellationToken cancellationToken)
@@ -173,17 +205,23 @@ public static class SecretEndpoints
 
     private sealed record VersionBlobs(byte[] Payload, byte[] WrappedDek, byte[] AadHash);
 
+    // Base64 of exactly PayloadMaxLength bytes is 87 384 chars; anything longer cannot decode to
+    // ≤ 64 KiB. Lengths 65 537..65 538 share that Base64 length, so those are caught after decoding.
+    private static readonly int MaxPayloadBase64Length = ((SecretVersion.PayloadMaxLength + 2) / 3) * 4;
+
+    private static bool IsPayloadTooLarge(string? payload) =>
+        payload is not null
+        && (payload.Length > MaxPayloadBase64Length
+            || (Base64Field.TryDecode(payload, 0, SecretVersion.PayloadMaxLength + 3, out var bytes) && bytes.Length > SecretVersion.PayloadMaxLength));
+
+    private static IResult PayloadTooLarge() =>
+        Results.Problem(statusCode: StatusCodes.Status413PayloadTooLarge, title: "Payload too large", detail: $"max {SecretVersion.PayloadMaxLength} bytes");
+
     private static VersionBlobs ValidateVersion(string? payload, string? wrappedDek, string? aadHash, Dictionary<string, string[]> errors)
     {
-        // Decode with headroom so "valid but too large" can be answered with 413 rather than 400;
-        // Kestrel's request-body limit bounds the worst case long before this point.
-        if (!Base64Field.TryDecode(payload, MinPayloadLength, SecretVersion.PayloadMaxLength * 2, out var payloadBytes))
+        if (!Base64Field.TryDecode(payload, MinPayloadLength, SecretVersion.PayloadMaxLength, out var payloadBytes))
         {
             errors["payloadCiphertext"] = [$"base64 of {MinPayloadLength}..{SecretVersion.PayloadMaxLength} bytes"];
-        }
-        else if (payloadBytes.Length > SecretVersion.PayloadMaxLength)
-        {
-            errors["payloadCiphertext"] = [$"too large: max {SecretVersion.PayloadMaxLength} bytes"];
         }
 
         if (!Base64Field.TryDecode(wrappedDek, MinWrappedDekLength, SecretVersion.WrappedDekMaxLength, out var dekBytes))
@@ -212,9 +250,9 @@ public static class SecretEndpoints
         CreatedBy = userId
     };
 
-    private static SecretVersionDto ToDto(SecretVersion v) => new(
+    private static SecretVersionDto ToDto(SecretVersion v, Guid vaultId) => new(
         v.SecretId,
-        Guid.Empty,
+        vaultId,
         v.VersionNo,
         Convert.ToBase64String(v.PayloadCiphertext),
         Convert.ToBase64String(v.WrappedDek),

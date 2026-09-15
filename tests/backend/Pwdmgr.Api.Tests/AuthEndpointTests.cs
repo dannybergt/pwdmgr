@@ -59,16 +59,17 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
         // Warm-up so JIT and connection setup do not skew the comparison.
         await client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, "wrong"), TestContext.Current.CancellationToken);
 
-        var wrong = await Time(() => client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, "wrong"), TestContext.Current.CancellationToken));
-        var unknown = await Time(() => client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, "nobody@example.test", "wrong"), TestContext.Current.CancellationToken));
-        var badTenant = await Time(() => client.PostAsJsonAsync(Login, new LoginRequest("no-such-tenant", ApiFactory.Email, ApiFactory.Password), TestContext.Current.CancellationToken));
+        // Minimum of three samples each: the floor is the Argon2 cost, the rest is host noise.
+        var wrong = await MinOf3(() => client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, "wrong"), TestContext.Current.CancellationToken));
+        var unknown = await MinOf3(() => client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, "nobody@example.test", "wrong"), TestContext.Current.CancellationToken));
+        var badTenant = await MinOf3(() => client.PostAsJsonAsync(Login, new LoginRequest("no-such-tenant", ApiFactory.Email, ApiFactory.Password), TestContext.Current.CancellationToken));
 
         Assert.Equal(HttpStatusCode.Unauthorized, wrong.Response.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, unknown.Response.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, badTenant.Response.StatusCode);
         Assert.DoesNotContain("Set-Cookie", wrong.Response.Headers.Select(h => h.Key));
 
-        // Both paths run the Argon2 verifier (~0.3-1 s); an unknown user must not be an order of magnitude faster.
+        // All paths run the Argon2 verifier (~0.3-1 s); an unknown user must not be an order of magnitude faster.
         Assert.True(unknown.Elapsed > wrong.Elapsed / 3, $"unknown user answered in {unknown.Elapsed.TotalMilliseconds} ms vs {wrong.Elapsed.TotalMilliseconds} ms for a wrong password");
         Assert.True(badTenant.Elapsed > wrong.Elapsed / 3, $"unknown tenant answered in {badTenant.Elapsed.TotalMilliseconds} ms vs {wrong.Elapsed.TotalMilliseconds} ms");
     }
@@ -151,11 +152,21 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
 
     private static string CookiePair(string setCookie) => setCookie.Split(';', 2)[0];
 
-    private static async Task<(HttpResponseMessage Response, TimeSpan Elapsed)> Time(Func<Task<HttpResponseMessage>> call)
+    private static async Task<(HttpResponseMessage Response, TimeSpan Elapsed)> MinOf3(Func<Task<HttpResponseMessage>> call)
     {
-        var sw = Stopwatch.StartNew();
-        var response = await call();
-        return (response, sw.Elapsed);
+        (HttpResponseMessage Response, TimeSpan Elapsed) best = default;
+        for (var i = 0; i < 3; i += 1)
+        {
+            var sw = Stopwatch.StartNew();
+            var response = await call();
+            var elapsed = sw.Elapsed;
+            if (best.Response is null || elapsed < best.Elapsed)
+            {
+                best = (response, elapsed);
+            }
+        }
+
+        return best;
     }
 }
 

@@ -24,7 +24,9 @@ public sealed class RateLimitTests(StrictRateLimitApiFactory factory) : IClassFi
         var limited = await client.PostAsJsonAsync(login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, ApiFactory.Password), TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
 
-        // Another account from the same client is not affected (per address + e-mail).
+        Assert.NotNull(limited.Headers.RetryAfter);
+
+        // Another account from the same client is not affected (per address + tenant + e-mail).
         var other = await client.PostAsJsonAsync(login, new LoginRequest(ApiFactory.TenantSlug, "someone-else@example.test", "wrong"), TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, other.StatusCode);
     }

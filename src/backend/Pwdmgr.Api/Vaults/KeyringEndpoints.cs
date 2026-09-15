@@ -70,7 +70,7 @@ public static class KeyringEndpoints
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Keyring already enrolled");
         }
 
-        db.UserKeyrings.Add(new UserKeyring
+        var keyring = new UserKeyring
         {
             Id = Guid.NewGuid(),
             TenantId = tenant.TenantId,
@@ -83,7 +83,8 @@ public static class KeyringEndpoints
             KdfSalt = salt,
             PublicKey = publicKey,
             EncryptedPrivateKey = encryptedPrivateKey
-        });
+        };
+        db.UserKeyrings.Add(keyring);
 
         try
         {
@@ -94,7 +95,7 @@ public static class KeyringEndpoints
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Keyring already enrolled");
         }
 
-        return Results.Created("/api/v1/me/keyring", ToDto(await db.UserKeyrings.SingleAsync(k => k.UserId == user.UserId, cancellationToken)));
+        return Results.Created("/api/v1/me/keyring", ToDto(keyring));
     }
 
     private static KeyringDto ToDto(UserKeyring k) => new(

@@ -22,7 +22,8 @@ public static class AuthEndpoints
 
         auth.MapPost("/login", LoginAsync).AllowAnonymous();
 
-        auth.MapPost("/logout", LogoutAsync).RequireAuthorization();
+        // Idempotent: an expired or missing cookie still gets the cookie cleared and a 204.
+        auth.MapPost("/logout", LogoutAsync).AllowAnonymous();
 
         auth.MapGet("/me", MeAsync).RequireAuthorization();
 
@@ -35,23 +36,43 @@ public static class AuthEndpoints
         SessionService sessions,
         LoginThrottle throttle,
         IOptions<AuthOptions> options,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
+        var logger = loggerFactory.CreateLogger("Pwdmgr.Audit.Auth");
         if (!MiniValidation.TryValidate(request, out var errors))
         {
             return Results.ValidationProblem(errors);
         }
 
-        if (!await throttle.TryAcquireAsync(http.Connection.RemoteIpAddress?.ToString() ?? "unknown", request.Email, cancellationToken))
+        var client = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!await throttle.TryAcquireAsync(client, request.TenantSlug, request.Email, cancellationToken))
         {
+            AuditLog.Login(logger, "rate_limited", request.TenantSlug, null, client);
+            http.Response.Headers.RetryAfter = ((int)throttle.Window.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
             return Results.Problem(statusCode: StatusCodes.Status429TooManyRequests, title: "Too many login attempts");
         }
 
-        var result = await sessions.LoginAsync(request.TenantSlug, request.Email, request.Password, options.Value.SessionTtl, cancellationToken);
+        LoginResult? result;
+        using (var slot = throttle.TryEnterVerifierGate())
+        {
+            if (slot is null)
+            {
+                AuditLog.Login(logger, "busy", request.TenantSlug, null, client);
+                http.Response.Headers.RetryAfter = "2";
+                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Login temporarily unavailable, retry shortly");
+            }
+
+            result = await sessions.LoginAsync(request.TenantSlug, request.Email, request.Password, options.Value.SessionTtl, cancellationToken);
+        }
+
         if (result is null)
         {
+            AuditLog.Login(logger, "invalid_credentials", request.TenantSlug, null, client);
             return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials");
         }
+
+        AuditLog.Login(logger, "ok", request.TenantSlug, result, client);
 
         http.Response.Cookies.Append(AuthOptions.CookieName, result.Token, new CookieOptions
         {
@@ -70,9 +91,15 @@ public static class AuthEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> LogoutAsync(HttpContext http, ICurrentUser user, SessionService sessions, CancellationToken cancellationToken)
+    private static async Task<IResult> LogoutAsync(HttpContext http, ICurrentUser user, ICurrentTenant tenant, SessionService sessions, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
-        await sessions.RevokeAsync(user.SessionId, cancellationToken);
+        if (user.IsAuthenticated)
+        {
+            await sessions.RevokeAsync(user.SessionId, cancellationToken);
+            loggerFactory.CreateLogger("Pwdmgr.Audit.Auth").LogInformation(
+                AuditLog.LogoutEvent, "Logout tenant={TenantId} user={UserId} session={SessionId}", tenant.TenantId, user.UserId, user.SessionId);
+        }
+
         http.Response.Cookies.Delete(AuthOptions.CookieName, new CookieOptions { Path = "/", HttpOnly = true, SameSite = SameSiteMode.Strict });
         return Results.NoContent();
     }

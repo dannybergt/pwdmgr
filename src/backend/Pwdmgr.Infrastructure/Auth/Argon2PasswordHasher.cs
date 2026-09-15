@@ -84,14 +84,15 @@ public sealed class Argon2PasswordHasher : IPasswordHasher
 
             switch (kv[..eq])
             {
-                case "m": m = value; break;
-                case "t": t = value; break;
-                case "p": p = value; break;
-                default: return false;
+                case "m" when m == 0: m = value; break;
+                case "t" when t == 0: t = value; break;
+                case "p" when p == 0: p = value; break;
+                default: return false; // unknown or duplicate key
             }
         }
 
-        if (m == 0 || t == 0 || p == 0)
+        // Caps guard against corrupted rows turning a login into a multi-GiB allocation.
+        if (m == 0 || t == 0 || p == 0 || m > 1024 * 1024 || t > 64 || p > 64)
         {
             return false;
         }

@@ -24,9 +24,17 @@ A second decision is the server-side password verifier for local users. Slice pl
   The browser receives the raw token in cookie `pwdmgr_session`: `HttpOnly`, `SameSite=Strict`,
   `Path=/`, `Secure` per `Auth:CookieSecurePolicy` (default `Always`; the plain-http compose dev
   stack sets `SameAsRequest`).
-- Every request is authenticated by hashing the cookie and loading the row; expiry and
-  revocation are therefore immediate and server-side. `POST /auth/logout` revokes; `GET /auth/me`
-  returns the principal. Absolute TTL (`Auth:SessionTtl`, 8 h default), no sliding renewal.
+- Every request is authenticated by hashing the cookie and loading the row joined with an
+  **active** user and tenant; expiry, revocation and disabling a user/tenant are therefore
+  immediate and server-side (a disabled user's sessions are not revoked but rejected on every
+  request; re-enabling makes them valid again unless revoked). `POST /auth/logout` revokes (idempotent, always clears the cookie);
+  `GET /auth/me` returns the principal. Absolute TTL (`Auth:SessionTtl`, 8 h default), no sliding
+  renewal. `last_seen_at` is written at most once per minute; `SessionPurgeService` deletes rows
+  expired or revoked more than 7 days ago (hourly), so the table stays bounded while recent
+  rows remain for audit.
+- Audit events (`Pwdmgr.Audit.Auth`): login outcome (`ok`, `invalid_credentials`,
+  `rate_limited`, `busy`) with tenant, user/session ids and client address, and logout — never
+  e-mail, password, token or cookie.
 - Why not JWT: same-origin SPA → cookie is the natural transport; revocation must be
   immediate (compromised device, admin lock) which JWT only approximates with short lifetimes
   and refresh rotation; no token in JavaScript memory keeps the XSS blast radius to "act via
@@ -35,9 +43,15 @@ A second decision is the server-side password verifier for local users. Slice pl
 - CSRF: `SameSite=Strict` plus `SameOriginMiddleware` — an unsafe-method request that carries an
   `Origin` header must be same-origin with the request `Host` (scheme-agnostic port compare).
   Requests without `Origin` (curl) pass; they are not a browser CSRF vector.
-- Rate limit: `LoginThrottle`, fixed window per client address + lower-cased e-mail
-  (`Auth:LoginRateLimitPermits`/`Window`, 10 per minute default). Keyed on the account too, so
-  a distributed guesser is throttled per target and a NAT does not lock everybody out.
+- Rate limit: `LoginThrottle` — fixed window per client address + tenant + lower-cased e-mail
+  (`Auth:LoginRateLimitPermits`/`Window`, 10 per minute default), a wider fixed window per
+  client address across all accounts (`LoginRateLimitPermitsPerClient`, 30 per minute — stops
+  spraying), and a global verifier gate (`MaxConcurrentVerifications`, CPU count) that answers
+  503 + `Retry-After` instead of queueing another 64 MiB Argon2 run — a single client cannot
+  exhaust memory with parallel logins for random accounts. Keyed on the account too, so a
+  distributed guesser is throttled per target and a NAT does not lock everybody out; behind a
+  proxy `Forwarded:KnownNetworks` **must** be set or every client shares the proxy address
+  (the API logs a warning outside Development when it is empty).
 - Unknown user, unknown tenant, disabled user and wrong password all run the Argon2 verifier
   (against a decoy hash when there is no credential) and answer 401 in the same latency class.
 - Tenant context: `RequestContext` (scoped) is populated by the authentication handler; the

@@ -63,8 +63,17 @@ public sealed class PostgresDatabase : IAsyncLifetime
         NpgsqlConnection.ClearAllPools();
         await using var admin = new NpgsqlConnection(adminConnectionString);
         await admin.OpenAsync();
-        await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)", admin);
-        await drop.ExecuteNonQueryAsync();
+        // Several fixtures tear down in parallel on a loaded host; give the drop room and never
+        // let a slow teardown turn a green run red.
+        await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)", admin) { CommandTimeout = 300 };
+        try
+        {
+            await drop.ExecuteNonQueryAsync();
+        }
+        catch (NpgsqlException ex)
+        {
+            Console.Error.WriteLine($"warning: could not drop {databaseName}: {ex.Message}");
+        }
     }
 
     /// <summary>Context scoped to <paramref name="tenantId"/> (tenant query filter active); without one nothing tenant-scoped is visible.</summary>
