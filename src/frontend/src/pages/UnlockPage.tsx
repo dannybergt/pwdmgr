@@ -19,9 +19,12 @@ export function UnlockPage({ me, onUnlocked, onLogout }: { me: Me; onUnlocked: (
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Bumped by "Try again" so a transient network failure while loading does not strand the page.
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setError(null);
     (async () => {
       try {
         const [record, vaultList] = await Promise.all([keyringApi.get(), vaultsApi.list()]);
@@ -39,7 +42,7 @@ export function UnlockPage({ me, onUnlocked, onLogout }: { me: Me; onUnlocked: (
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAttempt]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -106,7 +109,12 @@ export function UnlockPage({ me, onUnlocked, onLogout }: { me: Me; onUnlocked: (
           <button type="submit" disabled={busy !== null}>{mode.kind === "enrol" ? "Create vault" : "Unlock"}</button>
         </form>
       )}
-      {mode.kind === "loading" && error && <p role="alert" className="error">{error}</p>}
+      {mode.kind === "loading" && error && (
+        <>
+          <p role="alert" className="error">{error}</p>
+          <button type="button" onClick={() => setLoadAttempt((n) => n + 1)}>Try again</button>
+        </>
+      )}
     </main>
   );
 }

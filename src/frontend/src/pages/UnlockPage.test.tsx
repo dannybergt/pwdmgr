@@ -66,4 +66,24 @@ describe("UnlockPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create vault" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("differ"));
   });
+
+  it("offers a retry when the keyring cannot be loaded (network failure), then proceeds", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      calls += 1;
+      if (calls <= 2) {
+        throw new TypeError("Failed to fetch");
+      }
+      const url = String(input);
+      if (url.endsWith("/me/keyring")) {
+        return new Response(JSON.stringify({ title: "Not Found", status: 404 }), { status: 404 });
+      }
+      return new Response("[]", { status: 200 });
+    }));
+    render(<UnlockPage me={me} onUnlocked={vi.fn()} onLogout={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load your keyring.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Create your vault passphrase" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
