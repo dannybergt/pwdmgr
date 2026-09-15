@@ -31,7 +31,7 @@ Last update: 2026-09-15
 | internal `data` network | compose | API ↔ Postgres. |
 | Postgres on `data` network | compose service `postgres` | not published to host. |
 | volume `pgdata` | compose | Postgres data. |
-| network `pwdmgr-test`, container `pwdmgr-test-postgres` (no host port) | backend tests | throw-away; the destructive guard blocks its removal from a session — operator: `docker rm -f pwdmgr-test-postgres && docker network rm pwdmgr-test` (and the empty stray volume `pwdmgr-review-nm`); recreate per TESTING.md. |
+| network `pwdmgr-test`, container `pwdmgr-test-postgres` (no host port) | backend tests | throw-away; removed at session end 2026-09-15, recreate per TESTING.md. Left behind: the empty, root-owned volume `pwdmgr-review-nm` from a reviewer's aborted test run — the guard blocks `docker volume rm` from a session; operator: `docker volume rm pwdmgr-review-nm`. |
 | volume `pwdmgr-nuget` | SDK container builds | NuGet package cache, owned by the host uid. |
 | network `pwdmgr-bench`, container `pwdmgr-bench-web` (5173, not published) | KDF benchmark (TESTING.md) | transient; remove after the run. |
 
