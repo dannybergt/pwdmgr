@@ -4,13 +4,14 @@ using Microsoft.Extensions.Options;
 namespace Pwdmgr.Api.Auth;
 
 /// <summary>
-/// Fixed-window limiter per client address + e-mail (lower-cased). Keyed on the account too,
-/// so a distributed guesser is throttled per target and a single bad client cannot lock out
-/// everybody behind the same NAT.
+/// Three guards in front of the Argon2 verifier, which costs ~64 MiB and ~0.5 s per call:
+/// a fixed window per client address + tenant + e-mail (targeted guessing), a wider fixed
+/// window per client address alone (spraying many accounts from one client), and a global
+/// concurrency gate sized to the CPU count (remote memory exhaustion via parallel requests).
 /// </summary>
 public sealed class LoginThrottle(IOptions<AuthOptions> options) : IDisposable
 {
-    private readonly PartitionedRateLimiter<string> limiter = PartitionedRateLimiter.Create<string, string>(key =>
+    private readonly PartitionedRateLimiter<string> perAccount = PartitionedRateLimiter.Create<string, string>(key =>
         RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = options.Value.LoginRateLimitPermits,
@@ -18,11 +19,45 @@ public sealed class LoginThrottle(IOptions<AuthOptions> options) : IDisposable
             QueueLimit = 0
         }));
 
-    public async ValueTask<bool> TryAcquireAsync(string clientAddress, string email, CancellationToken cancellationToken)
+    private readonly PartitionedRateLimiter<string> perClient = PartitionedRateLimiter.Create<string, string>(key =>
+        RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = options.Value.LoginRateLimitPermitsPerClient,
+            Window = options.Value.LoginRateLimitWindow,
+            QueueLimit = 0
+        }));
+
+    private readonly SemaphoreSlim verifierGate = new(Math.Max(1, options.Value.MaxConcurrentVerifications));
+
+    public TimeSpan Window => options.Value.LoginRateLimitWindow;
+
+    public async ValueTask<bool> TryAcquireAsync(string clientAddress, string tenantSlug, string email, CancellationToken cancellationToken)
     {
-        using var lease = await limiter.AcquireAsync($"{clientAddress}|{email.ToLowerInvariant()}", 1, cancellationToken);
-        return lease.IsAcquired;
+        using var client = await perClient.AcquireAsync(clientAddress, 1, cancellationToken);
+        if (!client.IsAcquired)
+        {
+            return false;
+        }
+
+        using var account = await perAccount.AcquireAsync($"{clientAddress}|{tenantSlug.ToLowerInvariant()}|{email.ToLowerInvariant()}", 1, cancellationToken);
+        return account.IsAcquired;
     }
 
-    public void Dispose() => limiter.Dispose();
+    /// <summary>Non-blocking: when every slot is busy the caller answers 503 instead of queueing another 64 MiB KDF run.</summary>
+    public IDisposable? TryEnterVerifierGate()
+    {
+        return verifierGate.Wait(0) ? new Releaser(verifierGate) : null;
+    }
+
+    public void Dispose()
+    {
+        perAccount.Dispose();
+        perClient.Dispose();
+        verifierGate.Dispose();
+    }
+
+    private sealed class Releaser(SemaphoreSlim gate) : IDisposable
+    {
+        public void Dispose() => gate.Release();
+    }
 }
