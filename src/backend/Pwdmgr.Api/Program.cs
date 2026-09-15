@@ -44,6 +44,13 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+if (!app.Environment.IsDevelopment() && !builder.Configuration.GetSection("Forwarded:KnownNetworks").Exists())
+{
+    // Without a trusted proxy network every client shares Traefik's address: the login
+    // throttle would then lock out everybody behind the proxy and cookies would never be Secure.
+    app.Logger.LogWarning("Forwarded:KnownNetworks is empty; behind a reverse proxy set it to the proxy network CIDR");
+}
+
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
@@ -76,7 +83,7 @@ api.MapAuth();
 api.MapKeyring();
 api.MapVaults();
 
-await app.Services.MigrateDatabaseIfConfiguredAsync();
+await app.Services.InitializeDatabaseAsync();
 
 await app.RunAsync();
 
