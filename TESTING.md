@@ -2,7 +2,7 @@
 
 Status: living document — strategy and current state.
 
-Last update: 2026-05-16
+Last update: 2026-09-15
 
 ## Principles
 
@@ -18,12 +18,12 @@ Last update: 2026-05-16
 | Layer | Test type | Tooling | Mandatory for MVP |
 |---|---|---|---|
 | Domain (entities, value objects, invariants) | Unit | xUnit + FluentAssertions | yes |
-| Application services (use cases) | Unit + module-integration | xUnit + Testcontainers (Postgres) | yes |
-| API controllers / endpoints | Integration | `WebApplicationFactory` + Testcontainers | yes |
-| Persistence / EF Core mappings | Integration on real Postgres | Testcontainers | yes |
-| LDAP / AD adapters | Integration against `osixia/openldap` test container | Testcontainers | Phase 2 |
+| Application services (use cases) | Unit + module-integration | xUnit + real Postgres (`PWDMGR_TEST_PG`) | yes |
+| API controllers / endpoints | Integration | `WebApplicationFactory` + real Postgres (`PWDMGR_TEST_PG`) | yes |
+| Persistence / EF Core mappings | Integration on real Postgres | xUnit v3 + `PWDMGR_TEST_PG` (see below) | yes |
+| LDAP / AD adapters | Integration against `osixia/openldap` test container | compose service, same pattern as Postgres | Phase 2 |
 | Crypto adapters | Known-answer tests + interop with browser WASM | xUnit + golden vectors | yes |
-| Auth / MFA / step-up flows | Integration | xUnit + Testcontainers | yes |
+| Auth / MFA / step-up flows | Integration | xUnit + real Postgres (`PWDMGR_TEST_PG`) | yes |
 | Audit hash chain | Property tests | FsCheck (or Bogus + xUnit) | yes |
 
 ### Frontend (React + TS)
@@ -94,10 +94,36 @@ Every PR must:
 - Pass `dotnet build` for the backend solution.
 - Pass `npm run build` for the frontend.
 - Pass `gitleaks` scan.
-- Pass unit tests (when projects exist).
+- Pass `dotnet test` (backend job, against a `postgres:16` service container).
 
-The CI workflow currently in place ([.github/workflows/ci.yml](.github/workflows/ci.yml)) covers the build step. Test execution will be added as test projects come into the repo.
+## Backend database tests
+
+Integration tests need a real Postgres. They read the admin connection string from
+`PWDMGR_TEST_PG`, create one throw-away database per test class (`pwdmgr_test_<guid>`) and
+drop it afterwards. When the variable is unset the tests are **skipped** (xUnit v3 dynamic
+skip) — CI always sets it, so a skip there is a configuration error, not a pass.
+
+Testcontainers is deliberately not used: the Docker socket inside the SDK container under
+SELinux is an extra failure source, and one plain container on its own network does the job.
+
+Locally (no host port, own network — Constitution §3):
+
+```sh
+docker network create pwdmgr-test
+docker run -d --name pwdmgr-test-postgres --network pwdmgr-test \
+  -e POSTGRES_USER=pwdmgr -e POSTGRES_PASSWORD=pwdmgr-test-only -e POSTGRES_DB=pwdmgr postgres:16-alpine
+docker run --rm --network pwdmgr-test -u "$(id -u):$(id -g)" -e HOME=/tmp -e DOTNET_CLI_HOME=/tmp \
+  -e NUGET_PACKAGES=/tmp/.nuget/packages -v pwdmgr-nuget:/tmp/.nuget -v "$PWD:/w:z" -w /w \
+  -e "PWDMGR_TEST_PG=Host=pwdmgr-test-postgres;Database=pwdmgr;Username=pwdmgr;Password=pwdmgr-test-only" \
+  mcr.microsoft.com/dotnet/sdk:9.0 dotnet test pwdmgr.slnx
+```
+
+(`pwdmgr-nuget` is a named volume for the package cache; `chown` it to your uid once.)
 
 ## Current state of tests
 
-- No test projects exist yet under `tests/backend` or `tests/frontend`. Placeholders to be added with the first vertical slice. Tracked in [STATE.md](STATE.md) → "Open threads".
+- `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3): migration `Identity` apply on a fresh
+  database, second apply is a no-op, rollback to `0` and forward again; unique constraints
+  `tenants(slug)`, `users(tenant_id, email)`, `local_credentials(user_id)`; cascade of
+  credentials on user delete. Runs in CI.
+- No frontend test project yet (arrives with the crypto slice #1).
