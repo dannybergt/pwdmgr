@@ -65,7 +65,7 @@ GitHub Actions secrets configured (verified 2026-05-16):
 - [ ] Decide on Docker Desktop vs. Rancher Desktop for local container work.
 - [x] `"latest"` pins in `src/frontend` and `src/extension` replaced by explicit versions; extension lockfile + CI job + Dependabot added (PR #3, merged 2026-09-14 as `1595119`). Dependabot's first run started immediately after merge — expect a batch of update PRs (npm, NuGet, Actions, Docker) that need triage.
 - [x] Frontend build tooling moved to `devDependencies` (slice #1).
-- [ ] `index.html` meta CSP carries `frame-ancestors`, which browsers ignore in `<meta>` (console warning), and on the Vite **dev server** `style-src 'self'` blocks the inline `<style>` Vite injects for `styles.css` (production build/preview is fine). Move the CSP to response headers with the web image (slice #9) and give the dev server its own relaxed policy.
+- [x] CSP moved to nginx response headers with the web image (slice #9); `frame-ancestors` dropped from the `<meta>` fallback. The Vite **dev server** still blocks its own inline `<style>` under `style-src 'self'` — dev-only cosmetics, the built app is unaffected.
 - [ ] Extension is compiled with `tsc` only (no bundler); `moduleResolution: Bundler` is fine as long as `background.ts`/`content.ts` stay import-free. Revisit when a bundler is introduced.
 
 ## Assumptions / decisions deferred
