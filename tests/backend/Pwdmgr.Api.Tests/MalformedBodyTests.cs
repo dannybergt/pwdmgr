@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using Pwdmgr.Infrastructure.Tests;
 
 namespace Pwdmgr.Api.Tests;
@@ -24,6 +25,9 @@ public sealed class MalformedBodyTests(DevelopmentApiFactory factory) : IClassFi
         using var content = new StringContent(body, Encoding.UTF8, "application/json");
         var response = await client.PostAsync(Login, content, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.DoesNotContain(factory.Logs, entry => entry.Level >= LogLevel.Error);
     }
 
     [Fact]

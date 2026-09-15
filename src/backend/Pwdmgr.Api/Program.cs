@@ -90,6 +90,20 @@ if (!app.Environment.IsDevelopment() && !builder.Configuration.GetSection("Forwa
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
+// API responses are never cacheable and never sniffed — as middleware, so the headers also reach
+// responses no endpoint produced (binding failures → 400, 401 from the handler, 429 from the limiter).
+// The web image sets the same on its own responses.
+app.UseWhen(context => context.Request.Path.StartsWithSegments("/api"), branch => branch.Use((context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        context.Response.Headers.XContentTypeOptions = "nosniff";
+        return Task.CompletedTask;
+    });
+    return next(context);
+}));
+
 // Liveness runs no checks; readiness runs everything tagged "ready" (Postgres).
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
@@ -109,14 +123,6 @@ var version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInforma
 var commit = Environment.GetEnvironmentVariable("PWDMGR_COMMIT") ?? "unknown";
 
 var api = app.MapGroup("/api/v1");
-
-// API responses are never cacheable and never sniffed; the web image sets the same on its own responses.
-api.AddEndpointFilter(async (context, next) =>
-{
-    context.HttpContext.Response.Headers.CacheControl = "no-store";
-    context.HttpContext.Response.Headers.XContentTypeOptions = "nosniff";
-    return await next(context);
-});
 
 api.MapGet("/platform/info", () => Results.Ok(new
 {
