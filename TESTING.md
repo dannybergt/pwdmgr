@@ -168,10 +168,13 @@ that the page is a secure context. It runs against an already started stack (CI 
 locally without `node`):
 
 ```sh
-cd infra/compose && docker compose -p pwdmgr up -d --build       # preflight: ports 8080 and 8443
+cd infra/compose && docker compose up -d --build                 # preflight: ports 8080 and 8443
+until curl -sk https://localhost:8443/health/ready | grep -q Healthy; do sleep 2; done
 cd ../../src/frontend
 docker run --rm --network pwdmgr_public --ipc=host -u "$(id -u):$(id -g)" -e HOME=/tmp \
-  -e E2E_BASE_URL=https://reverse-proxy:8443 -v "$PWD:/w:z" -w /w \
+  -e E2E_BASE_URL=https://reverse-proxy:8443 \
+  -e E2E_PASSWORD="$(sed -n 's/^SEED_ADMIN_PASSWORD=//p' ../../infra/compose/.env)" \
+  -v "$PWD:/w:z" -w /w \
   mcr.microsoft.com/playwright:v1.63.0-noble sh -c 'npm ci --no-fund --ignore-scripts && npx playwright test'
 ```
 

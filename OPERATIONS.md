@@ -81,10 +81,15 @@ docker compose down                       # stops containers, keeps the pgdata v
 
 - **What "healthy" means:** api = `/health/ready` answered 200 (Postgres reachable); web = nginx serves `/`; reverse-proxy = Traefik ping; postgres = `pg_isready`. Traefik also probes the API every 10 s and takes it out of routing (503) when the probe fails — a 503 from `/api` with `docker compose ps` showing `api (healthy)` is Traefik's probe lagging by one interval.
 - **Restart policy** `unless-stopped`: after a host reboot the stack comes back by itself; a crashed API
-  (process exit) is restarted by Docker and Traefik serves 503 until the readiness probe passes
-  (≈ 45 s: `start_period` 40 s + probe interval). `docker compose kill`/`stop` count as manual
+  (process exit, any exit code) is restarted by Docker. Until then `/api` answers 502 (nothing
+  listening) and then 503 (Traefik's own probe in `traefik/dynamic.yaml`, every 10 s, marks the
+  server down) until that probe sees `/health/ready` 200 again — API start-up ≈ 35 s on this host
+  plus at most one probe interval, measured 42 s. Docker's `start_period` only grants the container
+  healthcheck a grace window; it does not delay routing. `docker compose kill`/`stop` count as manual
   stops and are *not* restarted — that is Docker semantics, not a fault; use `docker compose up -d`.
-- **Reading a problem:** every API error response carries `traceId`; grep the API log for that value to get the request's log scope. Login attempts appear as `Login outcome=… client=…` (never the e-mail or password); rate limiting as `outcome=rate_limited|account_throttled|busy`.
+  `unhealthy` is not a restart either: an API that lost Postgres stays up as `unhealthy` with Traefik
+  serving 503 — check `postgres` first, then `docker compose restart api`.
+- **Reading a problem:** every API error response carries `traceId` in W3C form (`00-<TraceId>-<SpanId>-00`); grep the API log for the middle `TraceId` segment (the JSON scope carries the bare 32 hex characters) to get the request's log scope. Login attempts appear as `Login outcome=… client=…` (never the e-mail or password); rate limiting as `outcome=rate_limited|account_throttled|busy`.
 - **Known log noise:** one EF Core `Error` line `Failed executing DbCommand … __EFMigrationsHistory` on the very first start against an empty database; DataProtection warnings `No XML encryptor configured` / `Storing keys in a directory …` at startup (unused by the opaque-token sessions). Traefik logs `aliasHeadersStrategy is not configured` once per entrypoint.
 - **Client address behind the proxy:** the API trusts `X-Forwarded-*` only from `PWDMGR_PROXY_NETWORK` (default `172.16.0.0/12`). If `docker network inspect pwdmgr_app` shows another subnet, set it in `.env` — otherwise every client counts as one for the login throttle and cookies are never `Secure`. The startup log line `Forwarded headers trusted from …` shows what is in effect.
 - **Backup of the dev database:** `docker compose exec -T postgres pg_dump -U pwdmgr pwdmgr > pwdmgr-$(date +%F).sql`; restore into an empty database with `docker compose exec -T postgres psql -U pwdmgr -d pwdmgr < file.sql`. Backups hold ciphertext only.

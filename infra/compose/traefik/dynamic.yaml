@@ -29,7 +29,7 @@ http:
       middlewares: [to-https]
       service: noop@internal
       priority: 1
-    # No metrics endpoint yet (OPERATIONS.md): answer 404 instead of the SPA's 200.
+    # No metrics endpoint yet (OPERATIONS.md): noop@internal answers 418 instead of the SPA's 200.
     pwdmgr-no-metrics:
       rule: "PathPrefix(`/metrics`)"
       entryPoints: [websecure]
