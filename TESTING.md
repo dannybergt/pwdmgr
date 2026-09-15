@@ -134,6 +134,9 @@ for the benchmark, see below). Known-answer vectors:
   §5.3 is not used because its only Argon2id vector needs associated data, which neither
   `hash-wasm` nor this KDF exposes.
 - HKDF-SHA256: RFC 5869 test cases 1 and 3.
+- Key wrapping (ADR-0009): RFC 7748 §6.1 X25519 key pairs as recipient/ephemeral keys and a
+  frozen wrapped blob that must unwrap to `00..1f`; X25519 itself is proven in Chromium by the
+  verifier (WebCrypto X25519 needs Chrome ≥ 133).
 - AES-256-GCM: round-trip, tampered AAD / ciphertext / tag / wrong key → rejection, 1 000
   distinct nonces (RNG sanity only).
 
@@ -149,6 +152,12 @@ docker run -d --name pwdmgr-bench-web --network pwdmgr-bench -u "$(id -u):$(id -
 # then drive http://pwdmgr-bench-web:5173/bench/kdf.html?runs=5 from a Playwright container on the
 # same network and read <pre id="out"> once body[data-done="1"] is set.
 ```
+
+WebCrypto (`crypto.subtle`, used by `aead.ts`, `hkdf.ts`, `keyring.ts`) exists only in a
+**secure context**. `http://<container>:5173` is not one; for browser proofs of those modules
+run the Playwright container with `--network container:pwdmgr-bench-web` and open
+`http://localhost:5173/`, or terminate TLS in front of the dev server. The Argon2 bench page
+works either way (`hash-wasm` does not need `crypto.subtle`).
 
 ## Current state of tests
 
@@ -168,7 +177,10 @@ docker run -d --name pwdmgr-bench-web --network pwdmgr-bench -u "$(id -u):$(id -
   without echo, vault needs keyring, vault list per holder, cross-tenant invisibility. Runs in
   CI. Verification catalogue:
   [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
-- `src/frontend/src/crypto/*.test.ts` (Vitest): 39 tests — Argon2id KATs, two frozen own
+- `src/frontend/src/crypto/*.test.ts` (Vitest): 52 tests — Argon2id KATs, two frozen own
   vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper
-  cases, nonce uniqueness. Runs in CI.
+  cases, nonce uniqueness; keyring enrol/unlock round-trip, wrong passphrase, user binding,
+  vault-key wrap/unwrap (recipient, context, tamper and low-order rejection, substituted public
+  key, RFC 7748 shared secret + frozen vector),
+  DEK and payload seal/open. Keyring tests use `KDF_MINIMUM` to stay fast. Runs in CI.
   Verification catalogue: [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
