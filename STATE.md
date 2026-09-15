@@ -6,7 +6,7 @@ Last update: 2026-09-15
 
 ## Snapshot
 
-- **Phase:** MVP wave 1 in progress. Slice #1 (crypto primitives + Argon2id benchmark, ADR-0006) implemented on `feature/crypto-primitives`; slice #2 (persistence foundation, ADR-0007) on `feature/persistence-foundation`. Plan: [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md).
+- **Phase:** MVP wave 1 complete on feature branches, PRs pending. Slice #2 (persistence foundation, ADR-0007) on `feature/persistence-foundation`; slice #1 (crypto primitives + Argon2id benchmark, ADR-0006) on `feature/crypto-primitives`, stacked on #2. Plan: [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md).
 - **Branch:** `main`. 2026-09-14: PR [#3](https://github.com/dannybergt/pwdmgr/pull/3) (dependency pins) plus Dependabot batch (#4, #6, #7, #9, #10, #13, #15) and #12/#20 squash-merged on `FREIGABE`. CI green on all five jobs. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1).
 - **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC).
 - **DockerHub namespace:** `dbergt`. **`dbergt/pwdmgr-api` is live** — first multi-arch push (`amd64` + `arm64`) at `:main` and `:sha-b41cfde`. <https://hub.docker.com/r/dbergt/pwdmgr-api>. Other images (`pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway`) follow with their respective service slices.
@@ -15,11 +15,11 @@ Last update: 2026-09-15
 
 | Component | Local build status | Notes |
 |---|---|---|
-| Backend (.NET 9) | requires .NET SDK 9.0.100 (pinned in `global.json`) | Not installed on this workstation; CI builds via `setup-dotnet@v4`. |
+| Backend (.NET 9) | requires .NET SDK 9.0.100 (pinned in `global.json`) | Not installed on host `dev-claude`; build/test in `mcr.microsoft.com/dotnet/sdk:9.0` with the `pwdmgr-nuget` cache volume (see TESTING.md). CI builds via `setup-dotnet@v6`. |
 | Frontend (React) | requires Node 24 | No `node` on host `dev-claude`; build via `docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/src/frontend:/w:z" -w /w node:24-alpine sh -c 'npm ci && npm test && npm run build'`. KDF benchmark in Chromium: see TESTING.md. |
 | Browser extension | requires Node 24 | Same container pattern with `src/extension`. |
 | Windows agent | requires .NET SDK | Same as backend. |
-| Docker Compose stack | requires Docker | Docker (native) available on `dev-claude`; SELinux → bind mounts need `:z`. Not yet started here. |
+| Docker Compose stack | requires Docker | Docker (native) on `dev-claude`; SELinux → bind mounts need `:z`. Started and verified 2026-09-15 (`docker compose -p pwdmgr up -d --build`). Traefik uses a file provider, no Docker socket. |
 
 ## Ports / shared resources (allocated)
 
@@ -30,6 +30,8 @@ Last update: 2026-09-15
 | internal `data` network | compose | API ↔ Postgres. |
 | Postgres on `data` network | compose service `postgres` | not published to host. |
 | volume `pgdata` | compose | Postgres data. |
+| network `pwdmgr-test`, container `pwdmgr-test-postgres` (no host port) | backend tests | throw-away; may stay up between sessions. |
+| volume `pwdmgr-nuget` | SDK container builds | NuGet package cache, owned by the host uid. |
 | network `pwdmgr-bench`, container `pwdmgr-bench-web` (5173, not published) | KDF benchmark (TESTING.md) | transient; remove after the run. |
 
 No production environments allocated.
@@ -51,10 +53,11 @@ GitHub Actions secrets configured (verified 2026-05-16):
 
 ## Open threads / next steps
 
-- [ ] MVP slices per [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md). **#1 done** (PR pending): `src/frontend/src/crypto/{encoding,kdf,hkdf,aead}.ts`, 31 Vitest tests, benchmark, ADR-0006. **#2 done** (PR pending, separate branch). **Next: wave 2** — #3 keyring crypto (X25519, ADR-0009) ∥ #4 local login + sessions (ADR-0008).
+- [ ] MVP slices per [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md). **#2 done** (PR pending): EF Core + Npgsql, `tenants`/`users`/`local_credentials`, migration `Identity`, readiness check, JSON logs, 8 DB tests, ADR-0007, verification catalogue `docs/verification/zielkatalog.md`. **#1 done** (PR pending, stacked on #2): `src/frontend/src/crypto/{encoding,kdf,hkdf,aead}.ts`, 39 Vitest tests, benchmark, ADR-0006. **Next: wave 2** — #4 local login + sessions (ADR-0008, critical path) ∥ #3 keyring crypto (X25519, ADR-0009).
+- [ ] `/api/v1/platform/info` carries no version field; add one so the verifier can identify the running artefact (verifier finding).
 - [ ] Add Dockerfiles for `pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway` when their services have real content (do NOT add empty placeholder containers — see Constitution §2.5 YAGNI).
 - [ ] Decide trademark / domain status for the product working name `Privora` (ADR-0003).
-- [ ] Install .NET 9 SDK locally so `dotnet build` is possible without CI round-trip.
+- [x] `dotnet build`/`dotnet test` run locally in the SDK container (TESTING.md); no host install needed.
 - [ ] Decide on Docker Desktop vs. Rancher Desktop for local container work.
 - [x] `"latest"` pins in `src/frontend` and `src/extension` replaced by explicit versions; extension lockfile + CI job + Dependabot added (PR #3, merged 2026-09-14 as `1595119`). Dependabot's first run started immediately after merge — expect a batch of update PRs (npm, NuGet, Actions, Docker) that need triage.
 - [x] Frontend build tooling moved to `devDependencies` (slice #1).
@@ -79,4 +82,5 @@ GitHub Actions secrets configured (verified 2026-05-16):
 - 2026-05-16: PR #1 squash-merged to `main` as commit `b41cfde`. Maintainer configured `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets. Post-merge `push` event triggered the `docker-api` job which built multi-arch with QEMU (4:08) and pushed `dbergt/pwdmgr-api` to Docker Hub with tags `:main` and `:sha-b41cfde`. First image is live at <https://hub.docker.com/r/dbergt/pwdmgr-api>.
 - 2026-09-14: §10 clean-up session on host `dev-claude` (no `node`/`dotnet` on host; Node work runs in `node:24-alpine` containers). Branch `chore/pin-node-deps`: `"latest"` → caret ranges from the lockfile (frontend, no resolved version changed) and `^6.0.3` for the extension; first `src/extension/package-lock.json`. Pinning TypeScript 6 exposed that the extension never compiled: `moduleResolution: Node` deprecated (→ `Bundler`, like frontend) and TS 6 no longer auto-includes `@types` (→ `@types/chrome` + `types: ["chrome"]`). Added `extension` CI job and `.github/dependabot.yml` (npm×2, nuget, github-actions, docker). Verified `npm ci && npm run build` in container for both projects; gitleaks (v8.21.2, container) clean on staged changes. `reviewer`: no blockers (one nit applied). `verifier`: 4/4 criteria proven with negative controls, no gaps. PR #3 opened, all five CI checks green, squash-merged to `main` as `1595119` on `FREIGABE`; no release tag (chore). Next: plan the first vertical MVP slice (crypto spike) via `planner`.
 - 2026-09-14 (cont.): Dependabot first run triaged. Closed platform majors with rationale (#5/#8 .NET base images 9→10, #11/#14 TypeScript 6→7, #16/#17/#19 `Microsoft.Extensions.*` 9→10) and added `ignore` rules for them (#20). Routine bumps merged on `FREIGABE`: frontend minor/patch group (#13: react 19.3, vite 8.3, eslint 10.10), NuGet 9.0.0→9.0.20 (#15), Actions majors (#4 gitleaks-action v3, #6 checkout v7, #7 setup-dotnet v6, #9 setup-node v7, #10 setup-qemu v4). #7/#9 needed a `@dependabot rebase` after the `checkout` bump. `planner` produced the MVP slice plan → `docs/developer/mvp-slice-plan.md`. No release tag (no product code yet).
+- 2026-09-15: wave 1 of the MVP slice plan, two worktrees in parallel. **Slice #2** (`feature/persistence-foundation`): EF Core 9 + Npgsql 9.0.4 + EFCore.NamingConventions; `Entity`/`TenantScopedEntity` split (Tenant lost its bogus `TenantId`); `User`, `LocalCredential` (PHC hash only, no separate params column — ADR-0007); migration `Identity` with composite `(tenant_id, id)` FK convention and `citext` e-mail (reviewer findings); `Database:MigrateOnStartup`; `/health/live` (no checks) and `/health/ready` (Postgres); JSON console logging. Compose had never been started: Traefik ran the Docker provider without a socket → all routes 404; switched to a file provider. xUnit v3 tests on a throw-away DB per class via `PWDMGR_TEST_PG`, fail (not skip) under `CI=true`. `verifier`: 10/10 catalogue rows proven at `117e0a8` with negative controls (first run 6/6 at `e819c9b`). Known noise: EF 9 logs one Error line on first migrate against an empty DB.
 - 2026-09-15: wave 1 of the MVP slice plan, two worktrees in parallel. **Slice #1** (`feature/crypto-primitives`): `hash-wasm` 4.12.0 adopted (§10 check: MIT, zero deps, audit clean, last release 2024-11), `src/frontend/src/crypto/` with Argon2id KEK derivation (NFKC, salt ≥ 16 B, parameter floor), HKDF-SHA256 and AES-256-GCM via WebCrypto, Base64/hex helpers; Vitest wired into `npm test` and CI (39 tests); 7 Argon2 reference vectors + 2 frozen own vectors, RFC 5869 vectors, tamper tests, 10k-nonce check. Benchmark matrix in Node 24 and headless Chromium 153 (Playwright container against `vite dev`; needed `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS` because Vite 6+ rejects non-localhost `Host`). CSP `script-src` gained `'wasm-unsafe-eval'`. ADR-0006. TS 6 needs `Uint8Array<ArrayBuffer>` for WebCrypto `BufferSource` → exported `Bytes` type. `reviewer`: no blockers; applied its warnings (NFKC-sensitive frozen vector cross-checked with argon2-cffi, key-hygiene caveat documented, `KDF_MAXIMUM` + integer check, `params` required). `verifier`: 7/7 catalogue rows proven at `0a3b60a` (Node + Chromium 153, both frozen vectors derived in-page; CSP negative control: WASM blocked without `'wasm-unsafe-eval'`); earlier full run at `ee141f7`.

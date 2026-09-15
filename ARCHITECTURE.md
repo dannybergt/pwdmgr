@@ -71,7 +71,7 @@ DockerHub naming convention: [ADR-0004](docs/adr/0004-dockerhub-naming-and-sync-
 ## Cross-cutting concerns
 
 - Multi-tenancy: every row carries `tenant_id`; row-level security planned as defense-in-depth.
-- Observability: structured JSON logs, `/healthz` + `/readyz`, Prometheus metrics, trace IDs propagated.
+- Observability: structured JSON logs, `/health/live` + `/health/ready`, Prometheus metrics, trace IDs propagated.
 - I18N: German + English from day one for UI and emails.
 - Secret hygiene: no plaintext in logs, telemetry, browser local storage, or backups.
 

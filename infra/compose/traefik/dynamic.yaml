@@ -1,0 +1,14 @@
+# Traefik dynamic configuration for the local compose stack. A file provider instead of
+# the Docker provider: no Docker socket in the proxy container (Constitution §2.1), and it
+# works on SELinux hosts without relabelling the socket.
+http:
+  routers:
+    pwdmgr-api:
+      rule: "PathPrefix(`/api`) || PathPrefix(`/health`)"
+      entryPoints: [web]
+      service: pwdmgr-api
+  services:
+    pwdmgr-api:
+      loadBalancer:
+        servers:
+          - url: "http://api:8080"

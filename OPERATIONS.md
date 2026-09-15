@@ -51,9 +51,9 @@ To create the PAT: <https://hub.docker.com/settings/security> → "New Access To
 
 | Concern | Tooling | Status |
 |---|---|---|
-| Structured logs (JSON, UTC ISO-8601, request ID) | ASP.NET Core + Serilog (planned) | not implemented |
-| Liveness probe | `GET /healthz` | not implemented |
-| Readiness probe | `GET /readyz` | not implemented |
+| Structured logs (JSON, UTC ISO-8601, request ID) | ASP.NET Core `JsonConsole` with scopes | implemented (API) |
+| Liveness probe | `GET /health/live` (runs no checks) | implemented |
+| Readiness probe | `GET /health/ready` (Postgres via EF Core check, 503 when down) | implemented |
 | Metrics | Prometheus scrape endpoint `/metrics` | not implemented |
 | Traces | OpenTelemetry export | Phase 2 |
 | Audit export to SIEM | Syslog / JSON webhook / Splunk HEC / Sentinel / Elastic | Phase 2 (see product-plan §§ 16 and 21) |
@@ -93,7 +93,7 @@ Pre-production. Once production exists:
 
 ## Run-book stubs (to fill before first production deploy)
 
-- [ ] How to apply EF Core migrations safely.
+- [ ] How to apply EF Core migrations safely. Current state: `Database:MigrateOnStartup=true` only in the compose dev stack (`Database__MigrateOnStartup`); production images default to `false` and migrate as an explicit deploy step (ADR-0007).
 - [ ] How to rotate `PWDMGR_PEPPER` (requires re-hash on next login, not full re-encrypt).
 - [ ] How to rotate `DOCKERHUB_TOKEN`.
 - [ ] How to onboard a new tenant admin.
