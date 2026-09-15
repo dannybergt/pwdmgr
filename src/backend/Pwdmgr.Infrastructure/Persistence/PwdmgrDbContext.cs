@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Pwdmgr.Application.Auth;
+using Pwdmgr.Domain.Common;
 using Pwdmgr.Domain.Identity;
+using Pwdmgr.Domain.Sessions;
 using Pwdmgr.Domain.Tenants;
 
 namespace Pwdmgr.Infrastructure.Persistence;
 
-public sealed class PwdmgrDbContext(DbContextOptions<PwdmgrDbContext> options) : DbContext(options)
+public sealed class PwdmgrDbContext(DbContextOptions<PwdmgrDbContext> options, ICurrentTenant currentTenant) : DbContext(options)
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
@@ -12,9 +15,30 @@ public sealed class PwdmgrDbContext(DbContextOptions<PwdmgrDbContext> options) :
 
     public DbSet<LocalCredential> LocalCredentials => Set<LocalCredential>();
 
+    public DbSet<Session> Sessions => Set<Session>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("citext");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PwdmgrDbContext).Assembly);
+
+        // Every tenant-scoped entity is filtered to the current request's tenant. Before
+        // authentication TenantId is Guid.Empty, so nothing matches; code that legitimately
+        // runs without a tenant (login, seeding, migrations) uses IgnoreQueryFilters explicitly.
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (typeof(TenantScopedEntity).IsAssignableFrom(entityType.ClrType))
+            {
+                var method = typeof(PwdmgrDbContext).GetMethod(nameof(ApplyTenantFilter), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                    .MakeGenericMethod(entityType.ClrType);
+                method.Invoke(this, [modelBuilder]);
+            }
+        }
+    }
+
+    private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)
+        where TEntity : TenantScopedEntity
+    {
+        modelBuilder.Entity<TEntity>().HasQueryFilter(e => e.TenantId == currentTenant.TenantId);
     }
 }
