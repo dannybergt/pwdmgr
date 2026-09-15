@@ -44,3 +44,7 @@ pgdata/
 redisdata/
 minio-data/
 
+
+# Playwright
+test-results/
+playwright-report/
