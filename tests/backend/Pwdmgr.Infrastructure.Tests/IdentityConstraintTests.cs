@@ -8,6 +8,7 @@ namespace Pwdmgr.Infrastructure.Tests;
 public sealed class IdentityConstraintTests(PostgresDatabase db) : IClassFixture<PostgresDatabase>, IAsyncLifetime
 {
     private const string UniqueViolation = "23505";
+    private const string ForeignKeyViolation = "23503";
 
     public async ValueTask InitializeAsync()
     {
@@ -41,6 +42,46 @@ public sealed class IdentityConstraintTests(PostgresDatabase db) : IClassFixture
             var pg = Assert.IsType<PostgresException>(ex.InnerException);
             Assert.Equal(UniqueViolation, pg.SqlState);
         }
+    }
+
+    [Fact]
+    public async Task Email_uniqueness_is_case_insensitive()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        var tenant = NewTenant();
+        await using var context = db.CreateContext();
+        context.Tenants.Add(tenant);
+        context.Users.Add(NewUser(tenant, "Dave@Example.test"));
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(await context.Users.AnyAsync(u => u.Email == "dave@example.test", TestContext.Current.CancellationToken));
+
+        context.Users.Add(NewUser(tenant, "dave@example.test"));
+        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(UniqueViolation, Assert.IsType<PostgresException>(ex.InnerException).SqlState);
+    }
+
+    [Fact]
+    public async Task Credential_cannot_reference_a_user_of_another_tenant()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        var a = NewTenant();
+        var b = NewTenant();
+        var user = NewUser(a, "erin@example.test");
+        await using var context = db.CreateContext();
+        context.Tenants.AddRange(a, b);
+        context.Users.Add(user);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        context.LocalCredentials.Add(new LocalCredential
+        {
+            Id = Guid.NewGuid(),
+            TenantId = b.Id,
+            UserId = user.Id,
+            PasswordHash = NewCredential(user).PasswordHash
+        });
+        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(ForeignKeyViolation, Assert.IsType<PostgresException>(ex.InnerException).SqlState);
     }
 
     [Fact]

@@ -11,6 +11,9 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AlterDatabase()
+                .Annotation("Npgsql:PostgresExtension:citext", ",,");
+
             migrationBuilder.CreateTable(
                 name: "tenants",
                 columns: table => new
@@ -34,7 +37,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     source = table.Column<int>(type: "integer", nullable: false),
                     external_id = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
-                    email = table.Column<string>(type: "character varying(320)", maxLength: 320, nullable: false),
+                    email = table.Column<string>(type: "citext", maxLength: 320, nullable: false),
                     display_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     status = table.Column<int>(type: "integer", nullable: false),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
@@ -44,6 +47,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_users", x => x.id);
+                    table.UniqueConstraint("ak_users_tenant_id_id", x => new { x.tenant_id, x.id });
                     table.ForeignKey(
                         name: "fk_users_tenants_tenant_id",
                         column: x => x.tenant_id,
@@ -74,10 +78,10 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_local_credentials_users_user_id",
-                        column: x => x.user_id,
+                        name: "fk_local_credentials_users_tenant_id_user_id",
+                        columns: x => new { x.tenant_id, x.user_id },
                         principalTable: "users",
-                        principalColumn: "id",
+                        principalColumns: new[] { "tenant_id", "id" },
                         onDelete: ReferentialAction.Cascade);
                 });
 

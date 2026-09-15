@@ -13,8 +13,13 @@ internal sealed class LocalCredentialConfiguration : IEntityTypeConfiguration<Lo
         builder.Property(c => c.PasswordHash).HasMaxLength(LocalCredential.PasswordHashMaxLength).IsRequired();
 
         builder.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<User>().WithOne().HasForeignKey<LocalCredential>(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(c => new { c.TenantId, c.UserId }).IsUnique();
+        // Composite FK onto users(tenant_id, id): a credential cannot reference a user of
+        // another tenant. One credential per user.
+        builder.HasOne<User>().WithOne()
+            .HasForeignKey<LocalCredential>(c => new { c.TenantId, c.UserId })
+            .HasPrincipalKey<User>(u => new { u.TenantId, u.Id })
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(c => c.UserId).IsUnique();
     }
 }

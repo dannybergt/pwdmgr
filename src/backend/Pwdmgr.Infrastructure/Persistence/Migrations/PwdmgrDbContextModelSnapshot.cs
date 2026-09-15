@@ -20,6 +20,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "9.0.20")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Pwdmgr.Domain.Identity.LocalCredential", b =>
@@ -89,7 +90,7 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(320)
-                        .HasColumnType("character varying(320)")
+                        .HasColumnType("citext")
                         .HasColumnName("email");
 
                     b.Property<string>("ExternalId")
@@ -115,6 +116,9 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_users");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("ak_users_tenant_id_id");
 
                     b.HasIndex("TenantId", "Email")
                         .IsUnique()
@@ -179,10 +183,11 @@ namespace Pwdmgr.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Pwdmgr.Domain.Identity.User", null)
                         .WithOne()
-                        .HasForeignKey("Pwdmgr.Domain.Identity.LocalCredential", "UserId")
+                        .HasForeignKey("Pwdmgr.Domain.Identity.LocalCredential", "TenantId", "UserId")
+                        .HasPrincipalKey("Pwdmgr.Domain.Identity.User", "TenantId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_local_credentials_users_user_id");
+                        .HasConstraintName("fk_local_credentials_users_tenant_id_user_id");
                 });
 
             modelBuilder.Entity("Pwdmgr.Domain.Identity.User", b =>

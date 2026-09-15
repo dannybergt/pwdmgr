@@ -17,11 +17,20 @@ public sealed class PostgresDatabase : IAsyncLifetime
 
     public string ConnectionString { get; private set; } = string.Empty;
 
+    /// <summary>Skips locally when no test database is configured; in CI (<c>CI=true</c>) a missing variable is a failure, not a silent pass.</summary>
     public static void SkipUnlessConfigured()
     {
-        Assert.SkipWhen(
-            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(EnvVar)),
-            $"{EnvVar} is not set; see TESTING.md for the local Postgres container.");
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(EnvVar)))
+        {
+            return;
+        }
+
+        if (string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Fail($"{EnvVar} must be set in CI; database tests would otherwise be skipped silently.");
+        }
+
+        Assert.Skip($"{EnvVar} is not set; see TESTING.md for the local Postgres container.");
     }
 
     public async ValueTask InitializeAsync()
@@ -71,7 +80,7 @@ public sealed class PostgresDatabase : IAsyncLifetime
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
             connection);
         await using var reader = await command.ExecuteReaderAsync();
         var tables = new List<string>();
@@ -80,6 +89,7 @@ public sealed class PostgresDatabase : IAsyncLifetime
             tables.Add(reader.GetString(0));
         }
 
-        return tables;
+        // Ordinal sort in C#, independent of the database collation.
+        return tables.Order(StringComparer.Ordinal).ToList();
     }
 }

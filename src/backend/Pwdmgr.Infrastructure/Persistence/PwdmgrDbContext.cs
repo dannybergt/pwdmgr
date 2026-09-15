@@ -14,6 +14,7 @@ public sealed class PwdmgrDbContext(DbContextOptions<PwdmgrDbContext> options) :
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasPostgresExtension("citext");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PwdmgrDbContext).Assembly);
     }
 }
