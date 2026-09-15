@@ -42,8 +42,12 @@ export interface UnlockedKeyring {
   readonly privateKey: CryptoKey;
 }
 
-function privateKeyAad(userId: string, cryptoVersion: number): Bytes {
-  return utf8Encode(`pwdmgr/v${cryptoVersion}/user-private-key|${userId}`);
+// Contexts are `|`-delimited; every id must be a Guid (never a slug) and keys are fixed-length hex,
+// so the encoding is unambiguous.
+function privateKeyAad(userId: string, publicKey: Bytes): Bytes {
+  // Binding the public key into the AAD means a server that swaps the stored public key
+  // (to make the user wrap vault keys to an attacker key) breaks the GCM tag on unlock.
+  return utf8Encode(`pwdmgr/v${CRYPTO_VERSION}/user-private-key|${userId}|${toHex(publicKey)}`);
 }
 
 async function importPublicKey(raw: Bytes): Promise<CryptoKey> {
@@ -69,12 +73,14 @@ export async function enrol(
   const kdfSalt = randomBytes(KDF_SALT_LENGTH);
   const kek = await deriveKek(passphrase, kdfSalt, kdfParams);
   try {
+    // The pair is generated extractable only to export PKCS#8 once; the returned key is a
+    // non-extractable re-import. The extractable original lives until GC (ADR-0006 caveat).
     const pair = (await crypto.subtle.generateKey(X25519, true, ["deriveBits"])) as CryptoKeyPair;
     const publicKey = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey)) as Bytes;
     const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as Bytes;
     try {
       const kekKey = await importAeadKey(kek);
-      const encryptedPrivateKey = await aeadSeal(kekKey, pkcs8, privateKeyAad(userId, CRYPTO_VERSION));
+      const encryptedPrivateKey = await aeadSeal(kekKey, pkcs8, privateKeyAad(userId, publicKey));
       const privateKey = await importPrivateKey(pkcs8, false);
       return {
         record: { cryptoVersion: CRYPTO_VERSION, kdfParams, kdfSalt, publicKey, encryptedPrivateKey },
@@ -93,12 +99,15 @@ export async function unlock(passphrase: string, userId: string, record: Keyring
   if (record.cryptoVersion !== CRYPTO_VERSION) {
     throw new KeyringError(`unsupported crypto version ${record.cryptoVersion}`);
   }
+  if (record.publicKey.length !== X25519_PUBLIC_KEY_LENGTH) {
+    throw new KeyringError("invalid public key length");
+  }
   const kek = await deriveKek(passphrase, record.kdfSalt, record.kdfParams);
   let pkcs8: Bytes | undefined;
   try {
     const kekKey = await importAeadKey(kek);
     try {
-      pkcs8 = await aeadOpen(kekKey, record.encryptedPrivateKey, privateKeyAad(userId, record.cryptoVersion));
+      pkcs8 = await aeadOpen(kekKey, record.encryptedPrivateKey, privateKeyAad(userId, record.publicKey));
     } catch {
       throw new KeyringError("wrong passphrase or corrupted keyring");
     }
@@ -117,34 +126,38 @@ function wrapInfo(ephemeralPublic: Bytes, recipientPublic: Bytes, cryptoVersion:
 }
 
 async function deriveWrapKey(privateKey: CryptoKey, peerPublic: Bytes, info: Bytes): Promise<CryptoKey> {
-  const peer = await importPublicKey(peerPublic);
-  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: peer }, privateKey, 256)) as Bytes;
-  // X25519 is unbound to the actual peer; bind the derived key to both public keys via HKDF info.
-  const wrapKey = await hkdfSha256(shared, new Uint8Array(0), info, AEAD_KEY_LENGTH);
-  wipe(shared);
+  let shared: Bytes | undefined;
+  let wrapKey: Bytes | undefined;
   try {
+    const peer = await importPublicKey(peerPublic);
+    // Low-order / all-zero points make deriveBits throw; that surfaces as KeyringError below.
+    shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: peer }, privateKey, 256)) as Bytes;
+    // X25519 is unbound to the actual peer; bind the derived key to both public keys via HKDF info.
+    wrapKey = await hkdfSha256(shared, new Uint8Array(0), info, AEAD_KEY_LENGTH);
     return await importAeadKey(wrapKey);
+  } catch (error) {
+    throw error instanceof KeyringError ? error : new KeyringError("key agreement failed");
   } finally {
-    wipe(wrapKey);
+    if (shared) {
+      wipe(shared);
+    }
+    if (wrapKey) {
+      wipe(wrapKey);
+    }
   }
 }
 
 /**
  * Wraps a raw symmetric key (vault key) for the holder of `recipientPublicKey`:
  * `ephemeralPublic(32) || nonce || ciphertext || tag`. `context` is the AAD, e.g.
- * `vault|<tenant>|<vault>|<recipient user>`, and must be reproduced on unwrap.
- * `ephemeral` is injectable for known-answer tests only.
+ * `vault-key|<tenant>|<vault>|<recipient user>|v1`, and must be reproduced on unwrap. A fresh
+ * ephemeral pair is generated on every call (never injectable).
  */
-export async function wrapKeyForPublicKey(
-  rawKey: Bytes,
-  recipientPublicKey: Bytes,
-  context: string,
-  ephemeral?: CryptoKeyPair
-): Promise<Bytes> {
+export async function wrapKeyForPublicKey(rawKey: Bytes, recipientPublicKey: Bytes, context: string): Promise<Bytes> {
   if (rawKey.length !== AEAD_KEY_LENGTH) {
     throw new KeyringError("raw key must be 32 bytes");
   }
-  const pair = ephemeral ?? ((await crypto.subtle.generateKey(X25519, false, ["deriveBits"])) as CryptoKeyPair);
+  const pair = (await crypto.subtle.generateKey(X25519, false, ["deriveBits"])) as CryptoKeyPair;
   const ephemeralPublic = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey)) as Bytes;
   const wrapKey = await deriveWrapKey(pair.privateKey, recipientPublicKey, wrapInfo(ephemeralPublic, recipientPublicKey, CRYPTO_VERSION));
   const sealed = await aeadSeal(wrapKey, rawKey, utf8Encode(context));
@@ -155,6 +168,9 @@ export async function wrapKeyForPublicKey(
 export async function unwrapKeyWithPrivateKey(wrapped: Bytes, keyring: UnlockedKeyring, context: string): Promise<Bytes> {
   if (wrapped.length < X25519_PUBLIC_KEY_LENGTH + 12 + 16) {
     throw new KeyringError("wrapped key too short");
+  }
+  if (keyring.publicKey.length !== X25519_PUBLIC_KEY_LENGTH) {
+    throw new KeyringError("invalid public key length");
   }
   const ephemeralPublic = wrapped.slice(0, X25519_PUBLIC_KEY_LENGTH);
   const sealed = wrapped.slice(X25519_PUBLIC_KEY_LENGTH);

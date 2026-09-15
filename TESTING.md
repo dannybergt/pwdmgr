@@ -153,6 +153,12 @@ docker run -d --name pwdmgr-bench-web --network pwdmgr-bench -u "$(id -u):$(id -
 # same network and read <pre id="out"> once body[data-done="1"] is set.
 ```
 
+WebCrypto (`crypto.subtle`, used by `aead.ts`, `hkdf.ts`, `keyring.ts`) exists only in a
+**secure context**. `http://<container>:5173` is not one; for browser proofs of those modules
+run the Playwright container with `--network container:pwdmgr-bench-web` and open
+`http://localhost:5173/`, or terminate TLS in front of the dev server. The Argon2 bench page
+works either way (`hash-wasm` does not need `crypto.subtle`).
+
 ## Current state of tests
 
 - `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3, 8 tests): migration `Identity` apply on
@@ -161,9 +167,10 @@ docker run -d --name pwdmgr-bench-web --network pwdmgr-bench -u "$(id -u):$(id -
   `local_credentials(user_id)`; composite FK rejects a credential pointing into another tenant;
   cascade of credentials on user delete. Runs in CI. Verification catalogue:
   [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
-- `src/frontend/src/crypto/*.test.ts` (Vitest): 49 tests — Argon2id KATs, two frozen own
+- `src/frontend/src/crypto/*.test.ts` (Vitest): 52 tests — Argon2id KATs, two frozen own
   vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper
   cases, nonce uniqueness; keyring enrol/unlock round-trip, wrong passphrase, user binding,
-  vault-key wrap/unwrap (recipient, context and tamper rejection, RFC 7748 frozen vector),
+  vault-key wrap/unwrap (recipient, context, tamper and low-order rejection, substituted public
+  key, RFC 7748 shared secret + frozen vector),
   DEK and payload seal/open. Keyring tests use `KDF_MINIMUM` to stay fast. Runs in CI.
   Verification catalogue: [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).

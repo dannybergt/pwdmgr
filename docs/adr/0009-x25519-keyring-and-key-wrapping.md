@@ -21,8 +21,11 @@ server never sees in the clear. Two options for the MVP:
 
 - **Every user gets an X25519 key pair at enrolment** (`src/frontend/src/crypto/keyring.ts`).
   The private key is exported as PKCS#8, sealed with AES-256-GCM under the KEK with AAD
-  `pwdmgr/v1/user-private-key|<user id>`, and only ever exists in the browser as a
-  non-extractable `CryptoKey` after unlock. The record stored server-side is
+  `pwdmgr/v1/user-private-key|<user id>|<public key hex>`, and only ever exists in the browser
+  as a non-extractable `CryptoKey` after unlock. Binding the **public key** into that AAD is
+  what stops a compromised server from substituting the stored public key (the user would
+  otherwise wrap vault keys to an attacker's key on the next vault creation): unlock fails on
+  the GCM tag instead. The record stored server-side is
   `{ cryptoVersion, kdfParams, kdfSalt, publicKey, encryptedPrivateKey }`.
 - **Key wrapping for a public key:** ephemeral X25519 key pair → `deriveBits` with the
   recipient's public key → HKDF-SHA256 with info
@@ -39,11 +42,16 @@ server never sees in the clear. Two options for the MVP:
 - **Not now (YAGNI):** Ed25519 signatures on wrapped keys / public keys. Until sharing lands
   the server is the only source of public keys and a malicious server could already withhold
   data; signing/fingerprint verification is the sharing slice's concern.
-- `CRYPTO_VERSION = 1` is carried in every AAD and in the keyring record; a future algorithm
-  change bumps it and keeps the old path for reading.
-- Known-answer anchors: RFC 7748 §6.1 key pairs (Alice = recipient, Bob = ephemeral) freeze a
-  wrapped blob that must always unwrap to `00..1f`; the wrap function accepts an injectable
-  ephemeral pair for that test only.
+- `CRYPTO_VERSION = 1` is carried in every AAD and in the keyring record. The wire formats
+  carry no version byte, so a future scheme change needs the version stored per row — the
+  server keeps `crypto_version` on `user_keyrings`, `wrapped_keys` and `secret_versions`
+  (slices #5/#6) and the client picks the read path from it.
+- Known-answer anchors: the RFC 7748 §6.1 shared secret is asserted directly against WebCrypto
+  X25519, and a wrapped blob produced with Alice as recipient and Bob as ephemeral key is
+  frozen and must always unwrap to `00..1f`. The ephemeral pair is never injectable in
+  production code — fresh per wrap is an invariant, not a convention.
+- Every X25519 failure (low-order point, wrong length) surfaces as `KeyringError`, never as a
+  raw `DOMException`.
 
 ## Consequences
 
@@ -54,6 +62,9 @@ Positive:
   `Bytes` only, and every primitive is WebCrypto except Argon2id (ADR-0006).
 - Proven in Node 24 and Chromium (X25519 in WebCrypto is Chrome ≥ 133 / Firefox ≥ 130 /
   Safari ≥ 17); older browsers are out of scope for the MVP.
+- **WebCrypto requires a secure context.** `crypto.subtle` is undefined on a plain-http origin
+  other than `localhost`, so the web client must be served over TLS (Traefik terminates it,
+  slice #9) — the dev stack on `http://localhost:8080` works, `http://<hostname>:8080` does not.
 
 Negative:
 
