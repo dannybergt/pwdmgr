@@ -55,6 +55,8 @@ public sealed class KeyringAndVaultTests(ApiFactory factory) : IClassFixture<Api
     [InlineData("kdf", 65536, 1, 4)]
     [InlineData("kdf", 65536, 3, 0)]
     [InlineData("kdf", 2 * 1024 * 1024, 3, 4)]
+    [InlineData("kdf", 65536, 17, 4)]
+    [InlineData("kdf", 65536, 3, 17)]
     public async Task Kdf_parameters_outside_the_allowed_range_are_rejected(string field, int m, int t, int p)
     {
         PostgresDatabase.SkipUnlessConfigured();
@@ -87,11 +89,11 @@ public sealed class KeyringAndVaultTests(ApiFactory factory) : IClassFixture<Api
         using var owner = await factory.CreateAuthenticatedClientAsync(NewUserEmail());
         using var other = await factory.CreateAuthenticatedClientAsync(NewUserEmail());
 
-        var noKeyring = await owner.PostAsJsonAsync(Vaults, new CreateVaultRequest("personal", B64(40), B64(92)), TestContext.Current.CancellationToken);
+        var noKeyring = await owner.PostAsJsonAsync(Vaults, new CreateVaultRequest(Guid.NewGuid(), "personal", B64(40), B64(92)), TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, noKeyring.StatusCode);
 
         Assert.Equal(HttpStatusCode.Created, (await owner.PutAsJsonAsync(Keyring, ValidKeyring(), TestContext.Current.CancellationToken)).StatusCode);
-        var created = await owner.PostAsJsonAsync(Vaults, new CreateVaultRequest("personal", B64(40, 0x0a), B64(92, 0x0b)), TestContext.Current.CancellationToken);
+        var created = await owner.PostAsJsonAsync(Vaults, new CreateVaultRequest(Guid.NewGuid(), "personal", B64(40, 0x0a), B64(92, 0x0b)), TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var vault = await created.Content.ReadFromJsonAsync<VaultDto>(TestContext.Current.CancellationToken);
         Assert.NotNull(vault);
@@ -105,7 +107,11 @@ public sealed class KeyringAndVaultTests(ApiFactory factory) : IClassFixture<Api
         var theirs = await other.GetFromJsonAsync<List<VaultDto>>(Vaults, TestContext.Current.CancellationToken);
         Assert.DoesNotContain(theirs!, v => v.Id == vault.Id);
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(Vaults, new CreateVaultRequest("shared", B64(40), B64(92)), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(Vaults, new CreateVaultRequest(Guid.NewGuid(), "shared", B64(40), B64(92)), TestContext.Current.CancellationToken)).StatusCode);
+
+        // Client-chosen id is honoured once, conflicts afterwards, and must not be empty.
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(Vaults, new CreateVaultRequest(vault.Id, "personal", B64(40), B64(92)), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(Vaults, new CreateVaultRequest(Guid.Empty, "personal", B64(40), B64(92)), TestContext.Current.CancellationToken)).StatusCode);
     }
 
     [Fact]
@@ -114,7 +120,7 @@ public sealed class KeyringAndVaultTests(ApiFactory factory) : IClassFixture<Api
         PostgresDatabase.SkipUnlessConfigured();
         using var alice = await factory.CreateAuthenticatedClientAsync(NewUserEmail());
         Assert.Equal(HttpStatusCode.Created, (await alice.PutAsJsonAsync(Keyring, ValidKeyring(), TestContext.Current.CancellationToken)).StatusCode);
-        var created = await alice.PostAsJsonAsync(Vaults, new CreateVaultRequest("personal", B64(40), B64(92)), TestContext.Current.CancellationToken);
+        var created = await alice.PostAsJsonAsync(Vaults, new CreateVaultRequest(Guid.NewGuid(), "personal", B64(40), B64(92)), TestContext.Current.CancellationToken);
         var vault = await created.Content.ReadFromJsonAsync<VaultDto>(TestContext.Current.CancellationToken);
 
         var (slug, email) = await factory.CreateTenantWithUserAsync();

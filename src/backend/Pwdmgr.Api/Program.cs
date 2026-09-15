@@ -41,6 +41,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     }
 });
 
+// Largest legitimate body: a 64 KiB secret payload as Base64 inside JSON (~90 KiB).
+builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MaxRequestBodySize = 256 * 1024);
+
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
