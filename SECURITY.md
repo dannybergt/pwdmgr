@@ -19,7 +19,7 @@
 | Brute force | Per client+account 10/min, per client 30/min, per account 20 failures/15 min across clients, global Argon2 concurrency gate (503), per-user write limit 60/min | `LoginThrottle`, `Program.cs` |
 | CSRF / headers | `SameSite=Strict` + same-origin check on unsafe methods; CSP `script-src 'self' 'wasm-unsafe-eval'`, nosniff, DENY, no-referrer, HSTS, `Cache-Control: no-store` on the API | `SameOriginMiddleware`, `web.security-headers.conf`, Traefik |
 | Tenant isolation | EF global query filter on every tenant-scoped entity + composite `(tenant_id, id)` foreign keys + check constraints in the schema | ADR-0007, migration `IntegrityConstraints` |
-| Input | Base64/length/enum validation at the boundary, 64 KiB payload limit (413), Kestrel body limit 256 KiB, KDF parameter floor/ceiling on client, server and database | endpoints, `KdfLimits` |
+| Input | Base64/length/enum validation at the boundary, malformed JSON → 400 without an error log in every environment (`ThrowOnBadRequest` off), 64 KiB payload limit (413), Kestrel body limit 256 KiB, KDF parameter floor/ceiling on client, server and database | endpoints, `KdfLimits`, `Program.cs` |
 | Audit | `Pwdmgr.Audit.Auth` / `Pwdmgr.Audit.Vault` events with ids and client address only | `AuditLog` |
 | Supply chain | Lockfiles, Dependabot (npm, NuGet, Actions, Docker, Compose), Actions pinned by commit SHA, `npm audit` / `dotnet list package --vulnerable` clean, gitleaks in pre-commit and CI | `.github/` |
 

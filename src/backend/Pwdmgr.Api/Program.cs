@@ -73,6 +73,11 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddProblemDetails();
 
+// A malformed body is the client's fault in every environment: 400 without an error log. The
+// framework's Development default rethrows binding failures, which the exception handler
+// turns into a logged 500 — reachable unauthenticated on /auth/login.
+builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment() && !builder.Configuration.GetSection("Forwarded:KnownNetworks").Exists())

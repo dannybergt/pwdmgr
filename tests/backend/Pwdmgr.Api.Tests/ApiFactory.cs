@@ -48,6 +48,9 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>Trust X-Forwarded-For from the in-process test client so client-address partitioning can be exercised.</summary>
     protected virtual bool TrustForwardedHeaders => false;
 
+    /// <summary>Hosting environment; Development mirrors the compose stack (seed stays off).</summary>
+    protected virtual string EnvironmentName => Environments.Production;
+
     public async ValueTask InitializeAsync()
     {
         await database.InitializeAsync();
@@ -82,7 +85,7 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment(Environments.Production);
+        builder.UseEnvironment(EnvironmentName);
         builder.UseSetting("ConnectionStrings:Postgres", database.ConnectionString);
         builder.UseSetting("Database:MigrateOnStartup", "false");
         builder.UseSetting("Auth:SessionTtl", SessionTtl.ToString());
@@ -194,4 +197,9 @@ public sealed class AccountLockApiFactory : ApiFactory
 public sealed class WriteLimitApiFactory : ApiFactory
 {
     protected override int WriteRequestsPerMinute => 3;
+}
+
+public sealed class DevelopmentApiFactory : ApiFactory
+{
+    protected override string EnvironmentName => Environments.Development;
 }
