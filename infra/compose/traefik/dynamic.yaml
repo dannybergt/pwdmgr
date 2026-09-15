@@ -1,14 +1,38 @@
 # Traefik dynamic configuration for the local compose stack. A file provider instead of
 # the Docker provider: no Docker socket in the proxy container (Constitution §2.1), and it
 # works on SELinux hosts without relabelling the socket.
+#
+# TLS: the `websecure` entrypoint uses Traefik's built-in self-signed default certificate.
+# WebCrypto needs a secure context, so the web client is only usable over https (or on
+# localhost); production replaces the default certificate (OPERATIONS.md).
 http:
   routers:
     pwdmgr-api:
       rule: "PathPrefix(`/api`) || PathPrefix(`/health`)"
+      entryPoints: [websecure]
+      service: pwdmgr-api
+      tls: {}
+    pwdmgr-api-http:
+      rule: "PathPrefix(`/api`) || PathPrefix(`/health`)"
       entryPoints: [web]
       service: pwdmgr-api
+    pwdmgr-web:
+      rule: "PathPrefix(`/`)"
+      entryPoints: [websecure]
+      service: pwdmgr-web
+      priority: 1
+      tls: {}
+    pwdmgr-web-http:
+      rule: "PathPrefix(`/`)"
+      entryPoints: [web]
+      service: pwdmgr-web
+      priority: 1
   services:
     pwdmgr-api:
       loadBalancer:
         servers:
           - url: "http://api:8080"
+    pwdmgr-web:
+      loadBalancer:
+        servers:
+          - url: "http://web:8080"

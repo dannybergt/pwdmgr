@@ -4,8 +4,10 @@ services:
     command:
       - --providers.file.filename=/etc/traefik/dynamic.yaml
       - --entrypoints.web.address=:8080
+      - --entrypoints.websecure.address=:8443
     ports:
       - "8080:8080"
+      - "8443:8443"
     volumes:
       - ./traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro,z
     networks:
@@ -34,6 +36,13 @@ services:
     networks:
       - app
       - data
+
+  web:
+    build:
+      context: ../../
+      dockerfile: infra/compose/docker/web.Dockerfile
+    networks:
+      - app
 
   postgres:
     image: postgres:16

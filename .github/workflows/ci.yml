@@ -144,3 +144,87 @@ jobs:
           sbom: true
           cache-from: type=gha,scope=pwdmgr-api
           cache-to: type=gha,scope=pwdmgr-api,mode=max
+
+  docker-web:
+    needs: [frontend, secret-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: dbergt/pwdmgr-web
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,prefix=sha-
+            type=raw,value=main,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+          labels: |
+            org.opencontainers.image.title=pwdmgr-web
+            org.opencontainers.image.description=Privora / pwdmgr web client (static, nginx-unprivileged)
+            org.opencontainers.image.vendor=dbergt
+            org.opencontainers.image.licenses=Proprietary
+
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build (and push on main/tags) pwdmgr-web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/compose/docker/web.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=pwdmgr-web
+          cache-to: type=gha,scope=pwdmgr-web,mode=max
+
+  e2e:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Start the compose stack (api, web, postgres, traefik with TLS)
+        working-directory: infra/compose
+        run: |
+          docker compose -p pwdmgr up -d --build
+          for i in $(seq 1 60); do
+            if curl -sk https://localhost:8443/health/ready | grep -q Healthy; then exit 0; fi
+            sleep 2
+          done
+          docker compose -p pwdmgr logs api
+          exit 1
+      - name: Run the Playwright golden path against https://localhost:8443
+        run: |
+          docker run --rm --network host --ipc=host -v "$PWD/src/frontend:/w" -w /w \
+            mcr.microsoft.com/playwright:v1.63.0-noble sh -c 'npm ci --no-fund --ignore-scripts && npx playwright test'
+      - name: Stack logs on failure
+        if: failure()
+        working-directory: infra/compose
+        run: docker compose -p pwdmgr logs
+      - name: Stop the stack
+        if: always()
+        working-directory: infra/compose
+        run: docker compose -p pwdmgr down
