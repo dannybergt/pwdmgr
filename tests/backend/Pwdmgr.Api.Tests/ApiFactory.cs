@@ -1,9 +1,11 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Pwdmgr.Application.Auth;
 using Pwdmgr.Domain.Identity;
 using Pwdmgr.Domain.Tenants;
@@ -48,6 +50,12 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>Trust X-Forwarded-For from the in-process test client so client-address partitioning can be exercised.</summary>
     protected virtual bool TrustForwardedHeaders => false;
 
+    /// <summary>Hosting environment; Development mirrors the compose stack (seed stays off).</summary>
+    protected virtual string EnvironmentName => Environments.Production;
+
+    /// <summary>Everything the host logged, so a test can assert that a client mistake produces no error line.</summary>
+    public ConcurrentQueue<(LogLevel Level, string Category, string Message)> Logs { get; } = new();
+
     public async ValueTask InitializeAsync()
     {
         await database.InitializeAsync();
@@ -82,7 +90,8 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment(Environments.Production);
+        builder.UseEnvironment(EnvironmentName);
+        builder.ConfigureLogging(logging => logging.AddProvider(new CaptureLoggerProvider(Logs)));
         builder.UseSetting("ConnectionStrings:Postgres", database.ConnectionString);
         builder.UseSetting("Database:MigrateOnStartup", "false");
         builder.UseSetting("Auth:SessionTtl", SessionTtl.ToString());
@@ -194,4 +203,28 @@ public sealed class AccountLockApiFactory : ApiFactory
 public sealed class WriteLimitApiFactory : ApiFactory
 {
     protected override int WriteRequestsPerMinute => 3;
+}
+
+public sealed class DevelopmentApiFactory : ApiFactory
+{
+    protected override string EnvironmentName => Environments.Development;
+}
+
+internal sealed class CaptureLoggerProvider(ConcurrentQueue<(LogLevel, string, string)> sink) : ILoggerProvider
+{
+    public ILogger CreateLogger(string categoryName) => new CaptureLogger(categoryName, sink);
+
+    public void Dispose()
+    {
+    }
+
+    private sealed class CaptureLogger(string category, ConcurrentQueue<(LogLevel, string, string)> sink) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => sink.Enqueue((logLevel, category, formatter(state, exception)));
+    }
 }

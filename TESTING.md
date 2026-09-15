@@ -33,8 +33,8 @@ Last update: 2026-09-15
 | Pure functions / hooks | Unit | Vitest | yes |
 | Components | Component test | Vitest + Testing Library | yes |
 | Crypto primitives (Argon2id KDF, HKDF, AES-GCM) | Known-answer + round-trip | Vitest (Node 24 WebCrypto + `hash-wasm`), Chromium run for the KDF benchmark | yes |
-| Unlock flow (login → MFA → passphrase) | E2E | Playwright | yes |
-| Vault CRUD (ciphertext only over the wire) | E2E | Playwright | yes |
+| Unlock flow (login → passphrase; MFA later) | E2E | Playwright (`src/frontend/e2e`) | yes |
+| Vault CRUD (ciphertext only over the wire) | E2E | Playwright (`src/frontend/e2e`, route interceptor) | yes |
 
 ### Browser extension
 
@@ -159,15 +159,54 @@ run the Playwright container with `--network container:pwdmgr-bench-web` and ope
 `http://localhost:5173/`, or terminate TLS in front of the dev server. The Argon2 bench page
 works either way (`hash-wasm` does not need `crypto.subtle`).
 
+## End-to-end (Playwright) against the compose stack
+
+`src/frontend/e2e/vault.spec.ts` drives the real client in headless Chromium: login → enrol
+(or unlock) → create a secret → reload → unlock → read it back, asserting that no `/api/`
+request carries the passphrase or the plaintext marker, that browser storage stays empty and
+that the page is a secure context. It runs against an already started stack (CI job `e2e`;
+locally without `node`):
+
+```sh
+cd infra/compose && docker compose up -d --build                 # preflight: ports 8080 and 8443
+until curl -sk https://localhost:8443/health/ready | grep -q Healthy; do sleep 2; done
+cd ../../src/frontend
+docker run --rm --network pwdmgr_public --ipc=host -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  -e E2E_BASE_URL=https://reverse-proxy:8443 \
+  -e E2E_PASSWORD="$(sed -n 's/^SEED_ADMIN_PASSWORD=//p' ../../infra/compose/.env)" \
+  -v "$PWD:/w:z" -w /w \
+  mcr.microsoft.com/playwright:v1.63.0-noble sh -c 'npm ci --no-fund --ignore-scripts && npx playwright test'
+```
+
+The browser joins the stack's `public` network and talks to Traefik by service name: on a
+host with many containers coming and going, `--network host` intermittently fails with
+`net::ERR_NETWORK_CHANGED` (observed 2/2 on dev-claude), inside the compose network it does not.
+
+Defaults: `E2E_BASE_URL=https://localhost:8443` (CI, where Playwright runs on the runner), the dev seed user (`E2E_PASSWORD` must equal
+`SEED_ADMIN_PASSWORD` from `infra/compose/.env`; CI passes it through), a deterministic
+`E2E_PASSPHRASE` so repeated runs against the same dev database take the unlock path. To force
+the enrolment path, empty the vault tables of the dev database first (psql on the compose
+`postgres` service: `user_keyrings`, `vaults`, `wrapped_keys`, `secrets`, `secret_versions`).
+
 ## Current state of tests
 
-- `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3, 18 tests): migrations `Identity` +
-  `Sessions` apply on a fresh database, second apply is a no-op, rollback to `0` and forward
+- `src/frontend/src/pages/*.test.tsx`, `src/session/vaultSession.test.ts` (Vitest + Testing
+  Library, jsdom): login error/429 display and `credentials: include`, wrong passphrase rejected
+  with no request carrying it, enrolment validation, idle lock with fake timers and storage/cookie/
+  IndexedDB spies, passphrase strength policy (zxcvbn, offline), vault recreated on unlock after an
+  interrupted enrolment, retry after a failed keyring load (12 tests).
+- `src/frontend/e2e/vault.spec.ts` (Playwright, 2 tests): golden path + wrong passphrase, see
+  above. Runs in the CI `e2e` job.
+
+- `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3, 27 tests): migrations `Identity`, `Sessions`, `CryptoMetadata`, `Secrets`, `IntegrityConstraints` apply on a fresh database, second apply is a no-op, rollback to `0` and forward
   again; unique constraints `tenants(slug)`, `users(tenant_id, email)` (case-insensitive via
   `citext`), `local_credentials(user_id)`; composite FK rejects a credential pointing into
   another tenant; cascade of credentials on user delete; tenant query filter; Argon2id
-  hasher KATs (same frozen vectors as the browser), PHC parsing, decoy hash.
-- `tests/backend/Pwdmgr.Api.Tests` (xUnit v3 + `WebApplicationFactory`, 23 tests): login cookie
+  hasher KATs (same frozen vectors as the browser), PHC parsing, decoy hash; `CryptoConstraintTests`:
+  cross-tenant wrapped keys rejected by FK, user delete cascades sessions/keyring/wrapped keys, a
+  vault with secrets cannot be deleted, secret delete cascades versions, version uniqueness, blob
+  size checks, KDF floor enforced by the database.
+- `tests/backend/Pwdmgr.Api.Tests` (xUnit v3 + `WebApplicationFactory`, 40 tests): login cookie
   flags, case-insensitive e-mail, wrong password / unknown user / unknown tenant → 401 in the
   same latency class, `me` without or with garbage cookie → 401, logout revokes the row,
   **session expiry after a real 3-second TTL**, cross-origin POST → 403, storage holds only
@@ -177,7 +216,9 @@ works either way (`hash-wasm` does not need `crypto.subtle`).
   without echo, vault needs keyring, vault list per holder, cross-tenant invisibility; secret
   create/list/latest/new version/soft delete chain with client-chosen ids and version contract,
   foreign vault/secret → 404 (same and other tenant), 64 KiB payload limit → 413, malformed
-  fields → 400. Runs in CI. Verification catalogue:
+  fields → 400; account-wide failure budget across client addresses, session replacement on
+  login, no-store/nosniff/no Server header, per-user write limit; malformed JSON bodies → 400
+  in a Development-environment fixture (`MalformedBodyTests`, 7 cases incl. unauthenticated login). Runs in CI. Verification catalogue:
   [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
 - `src/frontend/src/crypto/*.test.ts` (Vitest): 52 tests — Argon2id KATs, two frozen own
   vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper

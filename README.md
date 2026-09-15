@@ -5,7 +5,22 @@ Product working name: `Privora`
 
 `pwdmgr` is the project foundation for a commercial, multi-tenant, zero-knowledge enterprise platform for password management, secrets management, credential handling and future privileged-access-management capabilities.
 
-> **Status: project bootstrap.** Comprehensive planning is in [`docs/architecture/product-plan.md`](docs/architecture/product-plan.md). Code is skeleton-level and not yet runnable end-to-end.
+> **Status: MVP zero-knowledge vertical runnable.** Login → passphrase enrolment/unlock in the browser → create and read secrets, ciphertext-only on the server. Planning is in [`docs/architecture/product-plan.md`](docs/architecture/product-plan.md); what is proven at the running system is in [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
+
+## Quick start (Docker Compose)
+
+```sh
+cd infra/compose
+cp .env.example .env                       # dev-only credentials (git-ignored)
+docker compose up -d --build               # https on 8443 (self-signed); http on 127.0.0.1:8080 redirects
+```
+
+Open <https://localhost:8443/> (accept the self-signed certificate), sign in with the dev seed
+(tenant `dev`, `admin@dev.local`, password = `SEED_ADMIN_PASSWORD` from your `.env`), choose a
+vault passphrase — it never leaves the browser — and store your first secret. The API is reachable
+at `https://localhost:8443/api/v1/…`, health at `/health/ready`. This stack is a development /
+evaluation configuration; do not expose it to a network as is ([OPERATIONS.md](OPERATIONS.md)).
+Test recipes without `node`/`dotnet` on the host: [TESTING.md](TESTING.md).
 
 ## Start here
 
@@ -77,9 +92,5 @@ See [ADR-0002](docs/adr/0002-zero-knowledge-is-non-negotiable.md) for the underl
 
 ## Next Work Packages
 
-1. Configure `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` GitHub Actions secrets so CI can publish images.
-2. Build crypto spike for WebCrypto AES-GCM and Argon2id WASM round-trip.
-3. Implement tenant + user domain and initial EF Core migrations.
-4. Implement ciphertext-only Secret CRUD API.
-5. Add React unlock-flow prototype.
+The MVP vertical (slices #1–#9 of [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md)) is done. What follows, per [ROADMAP.md](ROADMAP.md) and [STATE.md](STATE.md): tenant/user onboarding without the dev seed, vault sharing (wrap the vault key for another user's public key), audit events, MFA, the browser extension and the Windows agent.
 

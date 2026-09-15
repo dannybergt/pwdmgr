@@ -72,3 +72,113 @@ article p {
   color: #d6cebf;
 }
 
+
+/* --- app screens (slices #7/#8) --- */
+.shell.narrow {
+  max-width: 32rem;
+  margin: 0 auto;
+  align-content: start;
+  padding-top: clamp(2rem, 10vh, 6rem);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #d8d0c2;
+}
+
+input,
+textarea {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(246, 239, 228, 0.25);
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  padding: 0.55rem 1rem;
+  border-radius: 0.5rem;
+  border: 0;
+  background: #dbad71;
+  color: #11130f;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+button.secondary {
+  background: rgba(246, 239, 228, 0.15);
+  color: inherit;
+}
+
+button.danger {
+  background: #c0563f;
+  color: #fff;
+}
+
+button.link {
+  background: none;
+  color: #dbad71;
+  padding: 0;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.muted {
+  color: #b8b0a2;
+}
+
+.error {
+  color: #ffb4a3;
+  margin: 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1rem;
+}
+
+dt {
+  color: #b8b0a2;
+}
+
+dd {
+  margin: 0;
+  word-break: break-all;
+}

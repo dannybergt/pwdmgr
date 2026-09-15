@@ -1,11 +1,31 @@
+# Development / evaluation stack (Constitution §3: fixed project name, no host ports beyond
+# STATE.md, no Docker socket). NOT a production deployment: Development mode, seed admin,
+# credentials from .env (copy .env.example), Traefik's self-signed default certificate.
+name: pwdmgr
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   reverse-proxy:
-    image: traefik:v3
+    image: traefik:v3.7
     command:
       - --providers.file.filename=/etc/traefik/dynamic.yaml
       - --entrypoints.web.address=:8080
+      - --entrypoints.websecure.address=:8443
+      - --entrypoints.traefik.address=:9000
+      - --ping=true
+      - --ping.entrypoint=traefik
+      - --accesslog=true
+      - --accesslog.format=json
+      - --log.level=INFO
     ports:
-      - "8080:8080"
+      # http only on localhost (curl, dev); the client needs https for WebCrypto anyway.
+      - "127.0.0.1:8080:8080"
+      - "8443:8443"
     volumes:
       - ./traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro,z
     networks:
@@ -13,6 +33,14 @@ services:
       - app
     security_opt:
       - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping", "--ping.entrypoint=traefik", "--entrypoints.traefik.address=:9000"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging: *logging
 
   api:
     build:
@@ -21,26 +49,55 @@ services:
       args:
         GIT_SHA: ${GIT_SHA:-local}
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: Host=postgres;Database=pwdmgr;Username=pwdmgr;Password=pwdmgr-dev-only
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__Postgres: Host=postgres;Database=pwdmgr;Username=pwdmgr;Password=${POSTGRES_PASSWORD:?copy infra/compose/.env.example to .env}
       Database__MigrateOnStartup: "true"
       Auth__CookieSecurePolicy: SameAsRequest
-      Forwarded__KnownNetworks__0: 172.16.0.0/12
-      Seed__Enabled: "true"
-      Seed__AdminPassword: dev-only-admin-password
+      Forwarded__KnownNetworks__0: ${PWDMGR_PROXY_NETWORK:-172.16.0.0/12}
+      Seed__Enabled: ${SEED_ENABLED:-true}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:?copy infra/compose/.env.example to .env}
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - app
       - data
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    # The aspnet image has no curl; bash + /dev/tcp reaches the readiness endpoint.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    mem_limit: 1g
+    logging: *logging
+
+  web:
+    build:
+      context: ../../
+      dockerfile: infra/compose/docker/web.Dockerfile
+    networks:
+      - app
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging: *logging
 
   postgres:
-    image: postgres:16
+    image: postgres:16.10
     environment:
       POSTGRES_DB: pwdmgr
       POSTGRES_USER: pwdmgr
-      POSTGRES_PASSWORD: pwdmgr-dev-only
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy infra/compose/.env.example to .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -48,8 +105,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
     networks:
       - data
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging: *logging
 
 networks:
   public:
@@ -60,4 +122,3 @@ networks:
 
 volumes:
   pgdata:
-
