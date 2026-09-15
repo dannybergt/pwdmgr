@@ -58,3 +58,15 @@ It does not recur on restart.
 | P4-10 | Tenant query filter isolates data | `Tenant_query_filter_hides_other_tenants_and_everything_without_context` green | L3 | xUnit | `IgnoreQueryFilters()` sees both tenants | OPEN |
 | P4-11 | Running artefact identifies itself | `/api/v1/platform/info` returns `version` (assembly) and `commit` (`PWDMGR_COMMIT`, build arg `GIT_SHA`) | L1 | curl | local compose build → `commit: local` | OPEN |
 
+## Slice #5 — keyring + vault API (ADR-0009, ciphertext-only)
+
+| ID | Goal (source) | Observable criterion | Layer | Proof step | Negative control | Status |
+|---|---|---|---|---|---|---|
+| P5-01 | API tests green (mvp-slice-plan.md, slice #5) | `Pwdmgr.Api.Tests` 18 passed incl. `KeyringAndVaultTests`; migration `CryptoMetadata` applied by `MigrationTests` | L3 | SDK container `dotnet test` | `CI=true` without variable → Failed | OPEN |
+| P5-02 | Enrolment is write-once | `PUT /me/keyring` → 201, second `PUT` → 409, `GET` returns the first record byte-for-byte | L1 | curl with a session cookie on the compose stack | — | OPEN |
+| P5-03 | KDF downgrade rejected server-side (ADR-0006 floor) | `kdf.memoryKib=19455` or `iterations=1` → 400 naming `kdf` | L1 | curl | `65536/3/4` → 201 | OPEN |
+| P5-04 | Vault creation needs a keyring; list shows only own vaults | `POST /vaults` before enrolment → 409; after → 201 with `keyVersion 1`; `GET /vaults` for another user of the same tenant → does not contain it | L1 | curl with two users (dev seed admin + a user created via psql) | — | OPEN |
+| P5-05 | Cross-tenant invisibility | user of another tenant: `GET /me/keyring` 404, `GET /vaults` empty | L1 + L3 | curl + psql (`wrapped_keys` row exists exactly once) | — | OPEN |
+| P5-06 | Server stores only opaque blobs | `psql`: `user_keyrings.public_key`, `encrypted_private_key`, `vaults.name_ciphertext`, `wrapped_keys.ciphertext` are `bytea`; no plaintext columns; `\d wrapped_keys` has `crypto_version` and the unique index over (tenant, resource, recipient, key_version) | L3 | psql | — | OPEN |
+| P5-07 | Malformed input rejected without echo | 31-byte public key / non-base64 salt → 400 naming the field, response body does not contain the submitted value | L1 | curl | — | OPEN |
+
