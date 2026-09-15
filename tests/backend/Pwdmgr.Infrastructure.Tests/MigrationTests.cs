@@ -39,5 +39,6 @@ public sealed class MigrationTests(PostgresDatabase db) : IClassFixture<Postgres
         // Forward again after rollback must succeed.
         await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
         Assert.Contains("users", await db.ListTablesAsync());
+        Assert.Empty(await context.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken));
     }
 }

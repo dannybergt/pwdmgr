@@ -1,4 +1,7 @@
 using System.Reflection;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Pwdmgr.Api.Auth;
@@ -42,7 +45,31 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // Largest legitimate body: a 64 KiB secret payload as Base64 inside JSON (~90 KiB).
-builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MaxRequestBodySize = 256 * 1024);
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.Limits.MaxRequestBodySize = 256 * 1024;
+    kestrel.AddServerHeader = false;
+});
+
+// Authenticated write routes: a token bucket per user so one script cannot flood the shared
+// database (Constitution §6 rate limits). Reads are not limited.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(WriteRateLimit.PolicyName, http =>
+    {
+        var permits = http.RequestServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<AuthOptions>>().Value.WriteRequestsPerMinute;
+        return RateLimitPartition.GetTokenBucketLimiter(
+            http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? http.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            _ => new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = permits,
+                TokensPerPeriod = permits,
+                ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            });
+    });
+});
 
 builder.Services.AddProblemDetails();
 
@@ -68,11 +95,23 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 app.UseMiddleware<SameOriginMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
+
+var forwarded = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<ForwardedHeadersOptions>>().Value;
+app.Logger.LogInformation("Forwarded headers trusted from {Networks}", string.Join(", ", forwarded.KnownNetworks.Select(n => $"{n.Prefix}/{n.PrefixLength}")));
 
 var version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
 var commit = Environment.GetEnvironmentVariable("PWDMGR_COMMIT") ?? "unknown";
 
 var api = app.MapGroup("/api/v1");
+
+// API responses are never cacheable and never sniffed; the web image sets the same on its own responses.
+api.AddEndpointFilter(async (context, next) =>
+{
+    context.HttpContext.Response.Headers.CacheControl = "no-store";
+    context.HttpContext.Response.Headers.XContentTypeOptions = "nosniff";
+    return await next(context);
+});
 
 api.MapGet("/platform/info", () => Results.Ok(new
 {

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Pwdmgr.Application.Auth;
 using Pwdmgr.Domain.Crypto;
@@ -17,7 +18,7 @@ public static class VaultEndpoints
     {
         var vaults = api.MapGroup("/vaults").RequireAuthorization();
         vaults.MapGet("/", ListAsync);
-        vaults.MapPost("/", CreateAsync);
+        vaults.MapPost("/", CreateAsync).RequireRateLimiting(Auth.WriteRateLimit.PolicyName);
         return api;
     }
 
@@ -38,7 +39,7 @@ public static class VaultEndpoints
         return Results.Ok(rows.Select(x => ToDto(x.Vault, x.Wrapped)));
     }
 
-    private static async Task<IResult> CreateAsync(CreateVaultRequest request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> CreateAsync(CreateVaultRequest request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string[]>();
         if (!string.Equals(request.Type, "personal", StringComparison.Ordinal))
@@ -69,11 +70,6 @@ public static class VaultEndpoints
         if (!await db.UserKeyrings.AnyAsync(k => k.UserId == user.UserId, cancellationToken))
         {
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Enrol a keyring before creating vaults");
-        }
-
-        if (await db.Vaults.IgnoreQueryFilters().AnyAsync(v => v.Id == request.Id, cancellationToken))
-        {
-            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Vault id already exists");
         }
 
         var vault = new Vault
@@ -107,6 +103,7 @@ public static class VaultEndpoints
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Vault id already exists");
         }
 
+        Auth.AuditLog.Resource(loggerFactory.CreateLogger("Pwdmgr.Audit.Vault"), "vault_created", tenant.TenantId, user.UserId, vault.Id);
         return Results.Created($"/api/v1/vaults/{vault.Id}", ToDto(vault, wrapped));
     }
 

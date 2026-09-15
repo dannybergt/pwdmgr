@@ -22,6 +22,7 @@ internal sealed class SecretConfiguration : IEntityTypeConfiguration<Secret>
             .HasPrincipalKey(v => new { v.TenantId, v.Id })
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(s => new { s.TenantId, s.VaultId, s.Status });
+        builder.ToTable(t => t.HasCheckConstraint("ck_secrets_name_len", $"octet_length(name_ciphertext) BETWEEN 28 AND {Secret.NameCiphertextMaxLength}"));
     }
 }
 
@@ -40,5 +41,12 @@ internal sealed class SecretVersionConfiguration : IEntityTypeConfiguration<Secr
             .HasPrincipalKey(s => new { s.TenantId, s.Id })
             .OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(v => new { v.TenantId, v.SecretId, v.VersionNo }).IsUnique();
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_secret_versions_payload_len", $"octet_length(payload_ciphertext) BETWEEN 28 AND {SecretVersion.PayloadMaxLength}");
+            t.HasCheckConstraint("ck_secret_versions_wrapped_dek_len", $"octet_length(wrapped_dek) BETWEEN 60 AND {SecretVersion.WrappedDekMaxLength}");
+            t.HasCheckConstraint("ck_secret_versions_aad_hash_len", $"octet_length(aad_hash) = {SecretVersion.AadHashLength}");
+            t.HasCheckConstraint("ck_secret_versions_version_no", "version_no >= 1");
+        });
     }
 }
