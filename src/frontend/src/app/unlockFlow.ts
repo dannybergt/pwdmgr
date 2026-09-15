@@ -17,8 +17,6 @@ import {
 } from "../crypto/keyring";
 import type { UnlockedState, UnlockedVault } from "../session/vaultSession";
 
-export const MIN_PASSPHRASE_LENGTH = 12;
-
 function toWire(record: KeyringRecord): KeyringWire {
   return {
     cryptoVersion: record.cryptoVersion,
@@ -47,7 +45,15 @@ function vaultNameAad(tenantId: string, vaultId: string): Bytes {
 export async function enrolAndCreateVault(passphrase: string, me: Me): Promise<UnlockedState> {
   const { record, unlocked } = await enrol(passphrase, me.userId, KDF_DEFAULT);
   await keyringApi.enrol(toWire(record));
+  return { me, keyring: unlocked, vault: await createPersonalVault(me, unlocked) };
+}
 
+/**
+ * Enrolment is two requests (keyring, then vault); if the second one failed the keyring exists
+ * without a vault. Unlock therefore creates the missing personal vault instead of leaving the
+ * account stuck — the keyring is already open at that point, so the wrap is possible.
+ */
+export async function createPersonalVault(me: Me, unlocked: UnlockedKeyring): Promise<UnlockedVault> {
   const vaultId = crypto.randomUUID();
   const rawVaultKey = generateVaultKey();
   const vaultKey = await importVaultKey(rawVaultKey);
@@ -55,17 +61,14 @@ export async function enrolAndCreateVault(passphrase: string, me: Me): Promise<U
   rawVaultKey.fill(0);
   const nameCiphertext = await aeadSeal(vaultKey, utf8Encode("Personal"), vaultNameAad(me.tenantId, vaultId));
   await vaultsApi.create(vaultId, toBase64(nameCiphertext), toBase64(wrapped));
-  return { me, keyring: unlocked, vault: { id: vaultId, name: "Personal", key: vaultKey } };
+  return { id: vaultId, name: "Personal", key: vaultKey };
 }
 
-/** Unlock: derive the KEK, open the private key, unwrap the first vault. Throws KeyringError on a wrong passphrase — before any network call. */
+/** Unlock: derive the KEK, open the private key, unwrap the first vault (or create it). Throws KeyringError on a wrong passphrase — before any network call. */
 export async function unlockWithPassphrase(passphrase: string, me: Me, wire: KeyringWire, vaultList: VaultWire[]): Promise<UnlockedState> {
   const unlocked = await unlockKeyring(passphrase, me.userId, fromWire(wire));
   const first = vaultList[0];
-  if (!first) {
-    throw new Error("no vault");
-  }
-  const vault = await openVault(first, me, unlocked);
+  const vault = first ? await openVault(first, me, unlocked) : await createPersonalVault(me, unlocked);
   return { me, keyring: unlocked, vault };
 }
 

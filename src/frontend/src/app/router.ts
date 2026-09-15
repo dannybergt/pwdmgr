@@ -7,9 +7,10 @@ function normalise(path: string): Route {
   return path === "/unlock" || path === "/vault" ? path : "/login";
 }
 
+/** State-driven redirects replace the entry so Back never lands on a screen the state forbids. */
 export function navigate(route: Route): void {
   if (window.location.pathname !== route) {
-    window.history.pushState(null, "", route);
+    window.history.replaceState(null, "", route);
   }
   window.dispatchEvent(new PopStateEvent("popstate"));
 }

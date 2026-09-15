@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      // changeOrigin must stay false: the API's SameOriginMiddleware compares Origin with Host.
       "/api": { target: process.env.PWDMGR_API_URL ?? "http://localhost:8080", changeOrigin: false }
     }
   }

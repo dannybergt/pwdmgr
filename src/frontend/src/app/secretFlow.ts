@@ -69,20 +69,6 @@ export async function readSecret(state: UnlockedState, secretId: string): Promis
   return JSON.parse(utf8Decode(plaintext)) as PasswordPayload;
 }
 
-/** Update = a new immutable version sealed for `latestVersionNo + 1`; a 409 means someone else was faster — re-read first. */
-export async function updateSecret(state: UnlockedState, secretId: string, latestVersionNo: number, payload: PasswordPayload): Promise<number> {
-  const versionNo = latestVersionNo + 1;
-  const aad = secretAad(state.me.tenantId, state.vault.id, secretId, versionNo);
-  const { payloadCiphertext, wrappedDek } = await sealSecretPayload(utf8Encode(JSON.stringify(payload)), state.vault.key, aad);
-  const created = await secretsApi.addVersion(secretId, {
-    versionNo,
-    payloadCiphertext: toBase64(payloadCiphertext),
-    wrappedDek: toBase64(wrappedDek),
-    aadHash: toBase64(await sha256(aad))
-  });
-  return created.versionNo;
-}
-
 export async function deleteSecret(secretId: string): Promise<void> {
   await secretsApi.remove(secretId);
 }

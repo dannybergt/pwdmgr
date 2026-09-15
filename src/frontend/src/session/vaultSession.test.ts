@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDLE_LOCK_MS, current, lock, subscribe, touch, unlock } from "./vaultSession";
 
@@ -8,10 +9,11 @@ describe("vaultSession", () => {
   afterEach(() => {
     lock();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("locks after the idle timeout and notifies subscribers", () => {
-    const seen: (boolean)[] = [];
+    const seen: boolean[] = [];
     const off = subscribe(() => seen.push(current() !== null));
     unlock(fakeState);
     expect(current()).not.toBeNull();
@@ -33,8 +35,19 @@ describe("vaultSession", () => {
     expect(current()).toBeNull();
   });
 
-  it("never touches browser storage", () => {
+  it("never writes to browser storage, cookies or IndexedDB", () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    const cookie = vi.spyOn(document, "cookie", "set");
+    const idb = { open: vi.fn() };
+    vi.stubGlobal("indexedDB", idb);
     unlock(fakeState);
-    expect(Object.keys(globalThis).some((k) => k === "localStorage")).toBe(false);
+    touch();
+    lock();
+    expect(setItem).not.toHaveBeenCalled();
+    expect(cookie).not.toHaveBeenCalled();
+    expect(idb.open).not.toHaveBeenCalled();
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
+    vi.unstubAllGlobals();
   });
 });

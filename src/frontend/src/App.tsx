@@ -34,14 +34,26 @@ export function App() {
   );
 
   useEffect(() => {
-    const touch = () => session.touch();
+    // Re-arm the idle timer at most once per second; mousemove fires far more often.
+    let last = 0;
+    const touch = () => {
+      const now = Date.now();
+      if (now - last > 1000) {
+        last = now;
+        session.touch();
+      }
+    };
+    // bfcache / tab freeze could keep the unlocked keys alive with a paused timer: lock on the way out.
+    const onHide = () => session.lock();
     for (const type of ["mousemove", "keydown", "click", "touchstart"]) {
       window.addEventListener(type, touch, { passive: true });
     }
+    window.addEventListener("pagehide", onHide);
     return () => {
       for (const type of ["mousemove", "keydown", "click", "touchstart"]) {
         window.removeEventListener(type, touch);
       }
+      window.removeEventListener("pagehide", onHide);
     };
   }, []);
 

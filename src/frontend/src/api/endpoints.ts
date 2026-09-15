@@ -24,7 +24,5 @@ export const secrets = {
   create: (vaultId: string, body: { id: string; type: string; nameCiphertext: string; payloadCiphertext: string; wrappedDek: string; aadHash: string }) =>
     api<SecretVersionWire>("POST", `/vaults/${vaultId}/secrets`, body),
   latest: (secretId: string) => api<SecretVersionWire>("GET", `/secrets/${secretId}/versions/latest`),
-  addVersion: (secretId: string, body: { versionNo: number; payloadCiphertext: string; wrappedDek: string; aadHash: string }) =>
-    api<SecretVersionWire>("POST", `/secrets/${secretId}/versions`, body),
   remove: (secretId: string) => api<void>("DELETE", `/secrets/${secretId}`)
 };

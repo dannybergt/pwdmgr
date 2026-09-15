@@ -29,7 +29,7 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
     headers: body === undefined ? {} : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
-  if (response.status === 401) {
+  if (response.status === 401 && path !== "/auth/login") {
     for (const listener of unauthorizedListeners) {
       listener();
     }

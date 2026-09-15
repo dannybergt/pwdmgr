@@ -2,7 +2,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import { ApiError } from "../api/client";
 import { auth, keyring as keyringApi, vaults as vaultsApi } from "../api/endpoints";
 import type { KeyringWire, Me, VaultWire } from "../api/types";
-import { MIN_PASSPHRASE_LENGTH, enrolAndCreateVault, unlockWithPassphrase } from "../app/unlockFlow";
+import { MIN_PASSPHRASE_LENGTH } from "../app/passphraseRules";
+import { enrolAndCreateVault, unlockWithPassphrase } from "../app/unlockFlow";
 import { KeyringError } from "../crypto/keyring";
 import type { UnlockedState } from "../session/vaultSession";
 
@@ -44,8 +45,11 @@ export function UnlockPage({ me, onUnlocked, onLogout }: { me: Me; onUnlocked: (
     event.preventDefault();
     setError(null);
     if (mode.kind === "enrol") {
-      if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
-        setError(`Use at least ${MIN_PASSPHRASE_LENGTH} characters.`);
+      // The strength dictionaries (~1 MB) load only when someone actually enrols.
+      const { passphraseProblem } = await import("../app/passphrasePolicy");
+      const problem = passphraseProblem(passphrase, [me.email, me.displayName, me.tenantSlug, me.email.split("@")[0] ?? ""]);
+      if (problem) {
+        setError(problem);
         return;
       }
       if (passphrase !== confirm) {
@@ -66,7 +70,7 @@ export function UnlockPage({ me, onUnlocked, onLogout }: { me: Me; onUnlocked: (
         onUnlocked(state);
       }
     } catch (e) {
-      setError(e instanceof KeyringError ? "Wrong passphrase." : "Unlock failed.");
+      setError(e instanceof KeyringError ? "Wrong passphrase." : mode.kind === "enrol" ? "Could not create your vault. Please try again." : "Unlock failed. Please try again.");
     } finally {
       setBusy(null);
     }

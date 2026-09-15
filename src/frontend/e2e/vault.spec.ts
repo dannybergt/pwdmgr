@@ -14,7 +14,7 @@ const loginSecret = process.env.E2E_PASSWORD ?? "dev-only-admin-password";
 const passphrase = process.env.E2E_PASSPHRASE ?? "e2e dev-seed passphrase 2026";
 const marker = `MARKER-${Date.now()}-plaintext-secret`;
 
-test.use({ baseURL: baseUrl, ignoreHTTPSErrors: true });
+test.use({ baseURL: baseUrl });
 
 function watchRequests(page: Page): Request[] {
   const requests: Request[] = [];
@@ -98,6 +98,7 @@ test("login → enrol or unlock → create → reload → unlock → read; nothi
   expect(consoleErrors.filter((line) => !/status of 40[14]/.test(line))).toEqual([]);
 });
 
+// Runs after the golden path in this serial file, so a keyring exists.
 test("wrong passphrase is rejected without a server round-trip", async ({ page }) => {
   const requests = watchRequests(page);
   await login(page);
