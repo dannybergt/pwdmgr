@@ -11,6 +11,7 @@ Architectural Decision Records live in [`docs/adr/`](docs/adr/). One file per de
 | 0003 | [Codename `pwdmgr`, product working name `Privora`](docs/adr/0003-pwdmgr-codename-privora-product-name.md) | 2026-05-01 | accepted |
 | 0004 | [DockerHub naming and sync strategy](docs/adr/0004-dockerhub-naming-and-sync-strategy.md) | 2026-05-16 | accepted |
 | 0005 | [`docs/architecture/product-plan.md` is the single source of truth](docs/adr/0005-product-plan-is-single-source-of-truth.md) | 2026-05-16 | accepted |
+| 0006 | [Argon2id via `hash-wasm`, KDF parameters and minimum](docs/adr/0006-argon2id-hash-wasm-and-kdf-parameters.md) | 2026-09-15 | accepted |
 | 0007 | [EF Core + Npgsql persistence foundation](docs/adr/0007-ef-core-npgsql-persistence-foundation.md) | 2026-09-15 | accepted |
 
 ## Proposed / under discussion

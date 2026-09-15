@@ -32,7 +32,7 @@ Last update: 2026-09-15
 |---|---|---|---|
 | Pure functions / hooks | Unit | Vitest | yes |
 | Components | Component test | Vitest + Testing Library | yes |
-| Crypto round-trip (Argon2id KDF → AES-GCM) | Browser-realistic | Vitest with jsdom + WebCrypto + Argon2 WASM | yes |
+| Crypto primitives (Argon2id KDF, HKDF, AES-GCM) | Known-answer + round-trip | Vitest (Node 24 WebCrypto + `hash-wasm`), Chromium run for the KDF benchmark | yes |
 | Unlock flow (login → MFA → passphrase) | E2E | Playwright | yes |
 | Vault CRUD (ciphertext only over the wire) | E2E | Playwright | yes |
 
@@ -94,6 +94,7 @@ Every PR must:
 - Pass `dotnet build` for the backend solution.
 - Pass `npm run build` for the frontend.
 - Pass `gitleaks` scan.
+- Pass `npm test` (frontend job, Vitest).
 - Pass `dotnet test` (backend job, against a `postgres:16` service container).
 
 ## Backend database tests
@@ -121,6 +122,34 @@ docker run --rm --network pwdmgr-test -u "$(id -u):$(id -g)" -e HOME=/tmp -e DOT
 
 (`pwdmgr-nuget` is a named volume for the package cache; `chown` it to your uid once.)
 
+## Frontend crypto tests and KDF benchmark
+
+`src/frontend/src/crypto/*.test.ts` run with `npm test` (Vitest, Node 24 — WebCrypto and the
+`hash-wasm` Argon2id build behave the same as in browsers; a real-browser run is still required
+for the benchmark, see below). Known-answer vectors:
+
+- Argon2id: seven vectors from the reference implementation's `src/test.c` (v=0x13, no secret,
+  no associated data) plus two frozen vectors at `KDF_DEFAULT` (ASCII and NFKC-sensitive),
+  cross-checked with argon2-cffi — the cross-implementation anchor for the .NET agent. RFC 9106
+  §5.3 is not used because its only Argon2id vector needs associated data, which neither
+  `hash-wasm` nor this KDF exposes.
+- HKDF-SHA256: RFC 5869 test cases 1 and 3.
+- AES-256-GCM: round-trip, tampered AAD / ciphertext / tag / wrong key → rejection, 1 000
+  distinct nonces (RNG sanity only).
+
+Benchmark (`npm run bench:kdf [runs]` in Node; `bench/kdf.html` in a browser) measures the
+m × t × p matrix from ADR-0006. Real-Chromium run on this host without `node`:
+
+```sh
+cd src/frontend
+docker network create pwdmgr-bench
+docker run -d --name pwdmgr-bench-web --network pwdmgr-bench -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  -e __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=pwdmgr-bench-web -v "$PWD:/w:z" -w /w node:24-alpine \
+  npx vite --host 0.0.0.0 --port 5173
+# then drive http://pwdmgr-bench-web:5173/bench/kdf.html?runs=5 from a Playwright container on the
+# same network and read <pre id="out"> once body[data-done="1"] is set.
+```
+
 ## Current state of tests
 
 - `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3, 8 tests): migration `Identity` apply on
@@ -129,4 +158,7 @@ docker run --rm --network pwdmgr-test -u "$(id -u):$(id -g)" -e HOME=/tmp -e DOT
   `local_credentials(user_id)`; composite FK rejects a credential pointing into another tenant;
   cascade of credentials on user delete. Runs in CI. Verification catalogue:
   [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
-- No frontend test project yet (arrives with the crypto slice #1).
+- `src/frontend/src/crypto/*.test.ts` (Vitest): 39 tests — Argon2id KATs, two frozen own
+  vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper
+  cases, nonce uniqueness. Runs in CI.
+  Verification catalogue: [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).

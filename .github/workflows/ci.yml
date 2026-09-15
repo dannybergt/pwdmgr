@@ -52,6 +52,9 @@ jobs:
       - name: Install frontend
         working-directory: src/frontend
         run: npm ci
+      - name: Test frontend
+        working-directory: src/frontend
+        run: npm test
       - name: Build frontend
         working-directory: src/frontend
         run: npm run build
