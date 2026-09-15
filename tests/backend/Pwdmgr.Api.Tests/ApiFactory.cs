@@ -31,8 +31,8 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public Guid UserId { get; private set; }
 
-    /// <summary>Session TTL used by the host; short so expiry can actually be observed.</summary>
-    public TimeSpan SessionTtl { get; } = TimeSpan.FromSeconds(3);
+    /// <summary>Session TTL used by the host. Long by default (slow CI hosts must not expire mid-test); the expiry test uses <see cref="ShortTtlApiFactory"/>.</summary>
+    public virtual TimeSpan SessionTtl => TimeSpan.FromMinutes(10);
 
     /// <summary>Login attempts per client+e-mail in a 10-minute window; the rate-limit test lowers this.</summary>
     protected virtual int LoginRateLimitPermits => 1000;
@@ -144,4 +144,9 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 public sealed class StrictRateLimitApiFactory : ApiFactory
 {
     protected override int LoginRateLimitPermits => 5;
+}
+
+public sealed class ShortTtlApiFactory : ApiFactory
+{
+    public override TimeSpan SessionTtl => TimeSpan.FromSeconds(3);
 }

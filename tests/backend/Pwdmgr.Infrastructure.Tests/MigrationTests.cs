@@ -15,7 +15,7 @@ public sealed class MigrationTests(PostgresDatabase db) : IClassFixture<Postgres
         await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
         var tables = await db.ListTablesAsync();
 
-        Assert.Equal(["__EFMigrationsHistory", "local_credentials", "sessions", "tenants", "user_keyrings", "users", "vaults", "wrapped_keys"], tables);
+        Assert.Equal(["__EFMigrationsHistory", "local_credentials", "secret_versions", "secrets", "sessions", "tenants", "user_keyrings", "users", "vaults", "wrapped_keys"], tables);
 
         // Second run must be a no-op (Constitution §9 idempotence).
         await context.Database.MigrateAsync(TestContext.Current.CancellationToken);

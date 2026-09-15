@@ -110,24 +110,6 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
     }
 
     [Fact]
-    public async Task Expired_session_is_rejected_after_the_ttl_really_passes()
-    {
-        PostgresDatabase.SkipUnlessConfigured();
-        using var client = factory.CreateApiClient();
-        var cookie = await LoginAsync(client);
-
-        using var before = new HttpRequestMessage(HttpMethod.Get, Me);
-        before.Headers.Add("Cookie", cookie);
-        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(before, TestContext.Current.CancellationToken)).StatusCode);
-
-        await Task.Delay(factory.SessionTtl + TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
-
-        using var after = new HttpRequestMessage(HttpMethod.Get, Me);
-        after.Headers.Add("Cookie", cookie);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(after, TestContext.Current.CancellationToken)).StatusCode);
-    }
-
-    [Fact]
     public async Task Cross_origin_post_is_rejected_same_origin_passes()
     {
         PostgresDatabase.SkipUnlessConfigured();
@@ -174,5 +156,32 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
         var sw = Stopwatch.StartNew();
         var response = await call();
         return (response, sw.Elapsed);
+    }
+}
+
+/// <summary>Own fixture with a 3-second TTL so expiry is observed by really waiting (nex-im lesson).</summary>
+public sealed class SessionExpiryTests(ShortTtlApiFactory factory) : IClassFixture<ShortTtlApiFactory>
+{
+    private static readonly Uri Login = new("/api/v1/auth/login", UriKind.Relative);
+    private static readonly Uri Me = new("/api/v1/auth/me", UriKind.Relative);
+
+    [Fact]
+    public async Task Expired_session_is_rejected_after_the_ttl_really_passes()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        using var client = factory.CreateApiClient();
+        var response = await client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, ApiFactory.Password), TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var cookie = response.Headers.GetValues("Set-Cookie").Single().Split(';', 2)[0];
+
+        using var before = new HttpRequestMessage(HttpMethod.Get, Me);
+        before.Headers.Add("Cookie", cookie);
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(before, TestContext.Current.CancellationToken)).StatusCode);
+
+        await Task.Delay(factory.SessionTtl + TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+
+        using var after = new HttpRequestMessage(HttpMethod.Get, Me);
+        after.Headers.Add("Cookie", cookie);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(after, TestContext.Current.CancellationToken)).StatusCode);
     }
 }
