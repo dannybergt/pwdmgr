@@ -4,6 +4,7 @@
   <Project Path="src/backend/Pwdmgr.Application/Pwdmgr.Application.csproj" />
   <Project Path="src/backend/Pwdmgr.Infrastructure/Pwdmgr.Infrastructure.csproj" />
   <Project Path="src/agent/Pwdmgr.Agent.Service/Pwdmgr.Agent.Service.csproj" />
+  <Project Path="tests/backend/Pwdmgr.Infrastructure.Tests/Pwdmgr.Infrastructure.Tests.csproj" />
   <Project Path="src/agent/Pwdmgr.Agent.Cli/Pwdmgr.Agent.Cli.csproj" />
 </Solution>
 
