@@ -22,6 +22,20 @@ public sealed class AuthOptions
     /// <summary>Login attempts allowed per client address across all accounts within the window (spraying guard).</summary>
     public int LoginRateLimitPermitsPerClient { get; set; } = 30;
 
+    /// <summary>Failed attempts per tenant + e-mail across all clients within <see cref="LoginFailureWindow"/> before the account answers 429 (distributed guessing guard).</summary>
+    public int LoginFailuresPerAccount { get; set; } = 20;
+
+    public TimeSpan LoginFailureWindow { get; set; } = TimeSpan.FromMinutes(15);
+
     /// <summary>Argon2 verifications allowed to run at the same time; 0 = processor count.</summary>
     public int MaxConcurrentVerifications { get; set; } = Environment.ProcessorCount;
+
+    /// <summary>Write requests (vault, secret, keyring) per user per minute.</summary>
+    public int WriteRequestsPerMinute { get; set; } = 60;
+}
+
+/// <summary>Rate limit policy name for authenticated write routes (vaults, secrets, keyring).</summary>
+public static class WriteRateLimit
+{
+    public const string PolicyName = "write";
 }

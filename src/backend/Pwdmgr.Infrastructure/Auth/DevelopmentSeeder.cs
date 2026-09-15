@@ -50,7 +50,17 @@ public sealed class DevelopmentSeeder(PwdmgrDbContext db, IPasswordHasher hasher
             UserId = user.Id,
             PasswordHash = hasher.Hash(seed.AdminPassword)
         });
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            // A second replica seeded first; the outcome is the same.
+            logger.LogInformation("Seed: tenant {Slug} was created concurrently by another instance", seed.TenantSlug);
+            return;
+        }
+
         logger.LogInformation("Seed: created tenant {Slug} with one local admin user", seed.TenantSlug);
     }
 }

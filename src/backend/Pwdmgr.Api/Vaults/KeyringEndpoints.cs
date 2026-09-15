@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Pwdmgr.Application.Auth;
 using Pwdmgr.Domain.Crypto;
@@ -17,7 +18,7 @@ public static class KeyringEndpoints
     {
         var me = api.MapGroup("/me").RequireAuthorization();
         me.MapGet("/keyring", GetAsync);
-        me.MapPut("/keyring", EnrolAsync);
+        me.MapPut("/keyring", EnrolAsync).RequireRateLimiting(Auth.WriteRateLimit.PolicyName);
         return api;
     }
 
@@ -28,7 +29,7 @@ public static class KeyringEndpoints
     }
 
     /// <summary>Enrolment only: a keyring is written once. Re-enrolment (passphrase change, recovery) is a later slice with its own rules.</summary>
-    private static async Task<IResult> EnrolAsync(KeyringDto request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> EnrolAsync(KeyringDto request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string[]>();
         if (request.CryptoVersion != SupportedCryptoVersion)
@@ -95,6 +96,7 @@ public static class KeyringEndpoints
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Keyring already enrolled");
         }
 
+        Auth.AuditLog.Resource(loggerFactory.CreateLogger("Pwdmgr.Audit.Vault"), "keyring_enrolled", tenant.TenantId, user.UserId, keyring.Id);
         return Results.Created("/api/v1/me/keyring", ToDto(keyring));
     }
 

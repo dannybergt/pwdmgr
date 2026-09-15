@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Pwdmgr.Api.Vaults;
 using Pwdmgr.Application.Auth;
@@ -33,12 +34,12 @@ public static class SecretEndpoints
     {
         var vaultSecrets = api.MapGroup("/vaults/{vaultId:guid}/secrets").RequireAuthorization();
         vaultSecrets.MapGet("/", ListAsync);
-        vaultSecrets.MapPost("/", CreateAsync);
+        vaultSecrets.MapPost("/", CreateAsync).RequireRateLimiting(Auth.WriteRateLimit.PolicyName);
 
         var secrets = api.MapGroup("/secrets/{secretId:guid}").RequireAuthorization();
         secrets.MapGet("/versions/latest", LatestAsync);
-        secrets.MapPost("/versions", AddVersionAsync);
-        secrets.MapDelete("/", DeleteAsync);
+        secrets.MapPost("/versions", AddVersionAsync).RequireRateLimiting(Auth.WriteRateLimit.PolicyName);
+        secrets.MapDelete("/", DeleteAsync).RequireRateLimiting(Auth.WriteRateLimit.PolicyName);
         return api;
     }
 
@@ -60,7 +61,7 @@ public static class SecretEndpoints
         return Results.Ok(rows);
     }
 
-    private static async Task<IResult> CreateAsync(Guid vaultId, CreateSecretRequest request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> CreateAsync(Guid vaultId, CreateSecretRequest request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string[]>();
         if (request.Type is null || !Types.Contains(request.Type))
@@ -94,11 +95,6 @@ public static class SecretEndpoints
             return Results.NotFound();
         }
 
-        if (await db.Secrets.IgnoreQueryFilters().AnyAsync(s => s.Id == request.Id, cancellationToken))
-        {
-            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Secret id already exists");
-        }
-
         var secret = new Secret
         {
             Id = request.Id,
@@ -119,8 +115,12 @@ public static class SecretEndpoints
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Secret id already exists");
         }
 
+        Audit(loggerFactory, "secret_created", tenant.TenantId, user.UserId, secret.Id);
         return Results.Created($"/api/v1/secrets/{secret.Id}/versions/latest", ToDto(version, secret.VaultId));
     }
+
+    private static void Audit(ILoggerFactory loggerFactory, string action, Guid tenantId, Guid userId, Guid resourceId) =>
+        Auth.AuditLog.Resource(loggerFactory.CreateLogger("Pwdmgr.Audit.Vault"), action, tenantId, userId, resourceId);
 
     private static async Task<IResult> LatestAsync(Guid secretId, ICurrentUser user, PwdmgrDbContext db, CancellationToken cancellationToken)
     {
@@ -134,7 +134,7 @@ public static class SecretEndpoints
         return Results.Ok(ToDto(version, secret.VaultId));
     }
 
-    private static async Task<IResult> AddVersionAsync(Guid secretId, NewVersionRequest request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> AddVersionAsync(Guid secretId, NewVersionRequest request, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string[]>();
         if (request.VersionNo < 2)
@@ -179,10 +179,11 @@ public static class SecretEndpoints
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Version conflict");
         }
 
+        Audit(loggerFactory, "secret_version_added", tenant.TenantId, user.UserId, secret.Id);
         return Results.Created($"/api/v1/secrets/{secret.Id}/versions/latest", ToDto(version, secret.VaultId));
     }
 
-    private static async Task<IResult> DeleteAsync(Guid secretId, ICurrentUser user, PwdmgrDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> DeleteAsync(Guid secretId, ICurrentUser user, ICurrentTenant tenant, PwdmgrDbContext db, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         var secret = await FindAccessibleAsync(db, user, secretId, cancellationToken);
         if (secret is null)
@@ -194,6 +195,7 @@ public static class SecretEndpoints
         secret.Status = SecretStatus.Deleted;
         secret.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
+        Audit(loggerFactory, "secret_deleted", tenant.TenantId, user.UserId, secret.Id);
         return Results.NoContent();
     }
 

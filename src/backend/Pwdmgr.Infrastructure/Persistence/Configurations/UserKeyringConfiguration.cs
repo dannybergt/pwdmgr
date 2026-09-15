@@ -22,5 +22,15 @@ internal sealed class UserKeyringConfiguration : IEntityTypeConfiguration<UserKe
             .HasPrincipalKey<User>(u => new { u.TenantId, u.Id })
             .OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(k => k.UserId).IsUnique();
+
+        // bytea has no length in Postgres; the API limits are mirrored as check constraints so no
+        // other writer can store oversized or malformed blobs.
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_user_keyrings_public_key_len", $"octet_length(public_key) = {UserKeyring.PublicKeyLength}");
+            t.HasCheckConstraint("ck_user_keyrings_kdf_salt_len", $"octet_length(kdf_salt) BETWEEN {UserKeyring.KdfSaltMinLength} AND {UserKeyring.KdfSaltMaxLength}");
+            t.HasCheckConstraint("ck_user_keyrings_private_key_len", $"octet_length(encrypted_private_key) BETWEEN 28 AND {UserKeyring.EncryptedPrivateKeyMaxLength}");
+            t.HasCheckConstraint("ck_user_keyrings_kdf_range", $"kdf_memory_kib BETWEEN {KdfLimits.MinMemoryKib} AND {KdfLimits.MaxMemoryKib} AND kdf_iterations BETWEEN {KdfLimits.MinIterations} AND {KdfLimits.MaxIterations} AND kdf_parallelism BETWEEN {KdfLimits.MinParallelism} AND {KdfLimits.MaxParallelism}");
+        });
     }
 }
