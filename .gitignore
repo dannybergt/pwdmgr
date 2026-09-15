@@ -48,3 +48,5 @@ minio-data/
 # Playwright
 test-results/
 playwright-report/
+# Claude-Code-Worktrees (executor-Subagents, AGENTS.md §4 Phase 3)
+.claude/worktrees/

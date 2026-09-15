@@ -60,7 +60,6 @@ It does not recur on restart.
 | P4-13 | Audit events without sensitive data | logs contain `Login outcome=ok tenant=… user=… session=… client=…`, `outcome=invalid_credentials tenantSlug=…`, `outcome=rate_limited`, `Logout …` — and still 0 hits for password / e-mail / token | L1 | `docker compose logs api` grep | — | PROVEN 3a99afd (36 audit lines: ok / invalid_credentials / rate_limited / busy / Logout; 0 hits for password, e-mail, token) |
 | P4-14 | Session table stays bounded | `SessionPurgeService` deletes rows expired/revoked > 7 days ago (xUnit `Purge_removes_sessions_expired_longer_than_the_retention`); `last_seen_at` written at most once per minute | L3 | xUnit + psql | recent rows kept | PROVEN 3a99afd (xUnit purge green; live: 8-day row purged on start, 6-day row kept; `last_seen_at` unchanged across two calls in 14 s, updated after 69 s) |
 | P4-11 | Running artefact identifies itself | `/api/v1/platform/info` returns `version` (assembly) and `commit` (`PWDMGR_COMMIT`, build arg `GIT_SHA`) | L1 | curl | local compose build → `commit: local` | PROVEN 5376906 (`version 0.1.0`, `commit local`; NC `PWDMGR_COMMIT` override reflected) |
-
 ## Slice #5 — keyring + vault API (ADR-0009, ciphertext-only)
 
 | ID | Goal (source) | Observable criterion | Layer | Proof step | Negative control | Status |
