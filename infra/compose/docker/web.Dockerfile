@@ -1,5 +1,5 @@
 # Static web client: build with Node, serve with unprivileged nginx (SPA fallback + security headers).
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /src
 COPY src/frontend/package.json src/frontend/package-lock.json ./
 RUN npm ci --no-fund --ignore-scripts
