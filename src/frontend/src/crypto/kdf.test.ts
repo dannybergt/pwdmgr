@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { argon2id } from "hash-wasm";
 import { fromHex, toHex, utf8Encode } from "./encoding";
-import { KDF_DEFAULT, KDF_MINIMUM, deriveKek, isAtLeastMinimum, normalizePassphrase } from "./kdf";
+import { KDF_DEFAULT, KDF_MAXIMUM, KDF_MINIMUM, deriveKek, isAtLeastMinimum, isValidKdfParams, normalizePassphrase } from "./kdf";
 
 /**
  * Known-answer tests from the Argon2 reference implementation (`src/test.c`, version 0x13).
@@ -45,21 +45,43 @@ describe("argon2id (hash-wasm) against reference vectors", () => {
 });
 
 /**
- * Own vector at the default parameters (m=64 MiB, t=3, p=4). Frozen on first run; a change
- * here means the KDF no longer produces the same KEK for existing users.
+ * Own vectors at the default parameters (m=64 MiB, t=3, p=4), salt 00..0f. A change here
+ * means the KDF no longer produces the same KEK for existing users.
+ *
+ * Both were cross-checked against an independent implementation (argon2-cffi 23.x, which
+ * binds the reference libargon2) on 2026-09-15:
+ *   hash_secret_raw(NFKC(passphrase).encode(), bytes(range(16)), time_cost=3,
+ *                   memory_cost=65536, parallelism=4, hash_len=32, type=Type.ID)
+ * The second vector is normalisation-sensitive (U+FB01 ligature, decomposed e + U+0301,
+ * U+2460 circled one → NFKC "fiancé 1"); it is the anchor for the .NET agent, which must use
+ * NormalizationForm.FormKC. Re-run the argon2-cffi check after any library swap.
  */
-const OWN_VECTOR = {
-  passphrase: "correct horse battery staple",
-  salt: "000102030405060708090a0b0c0d0e0f",
-  kek: "853b272a44db1421c02962669a55eb0994f3cab385ed1c4c79253eee19bab49e"
-};
+const OWN_VECTORS = [
+  {
+    name: "ascii",
+    passphrase: "correct horse battery staple",
+    kek: "853b272a44db1421c02962669a55eb0994f3cab385ed1c4c79253eee19bab49e"
+  },
+  {
+    name: "nfkc-sensitive",
+    passphrase: "\ufb01anc\u0065\u0301 \u2460",
+    kek: "641be819c7e4f005084a1604c28df8953e100c98b6e4d13299ff42beec1cd9fb"
+  }
+] as const;
+const OWN_SALT = "000102030405060708090a0b0c0d0e0f";
 
 describe("deriveKek", () => {
-  it("matches the frozen own vector at KDF_DEFAULT", async () => {
-    const kek = await deriveKek(OWN_VECTOR.passphrase, fromHex(OWN_VECTOR.salt), KDF_DEFAULT);
-    expect(kek).toHaveLength(32);
-    expect(toHex(kek)).toBe(OWN_VECTOR.kek);
-  }, 30_000);
+  for (const v of OWN_VECTORS) {
+    it(`matches the frozen own vector (${v.name}) at KDF_DEFAULT`, async () => {
+      const kek = await deriveKek(v.passphrase, fromHex(OWN_SALT), KDF_DEFAULT);
+      expect(kek).toHaveLength(32);
+      expect(toHex(kek)).toBe(v.kek);
+    }, 30_000);
+  }
+
+  it("normalises the nfkc-sensitive passphrase to 'fiancé 1'", () => {
+    expect(normalizePassphrase(OWN_VECTORS[1].passphrase)).toEqual(utf8Encode("fiancé 1"));
+  });
 
   it("normalises the passphrase to NFKC before hashing", async () => {
     const composed = "café"; // é as one code point
@@ -72,14 +94,30 @@ describe("deriveKek", () => {
     await expect(deriveKek("x", new Uint8Array(15), KDF_MINIMUM)).rejects.toThrow(RangeError);
   });
 
-  it("rejects parameters below the enforced minimum", async () => {
-    const weak = { ...KDF_MINIMUM, memoryKib: KDF_MINIMUM.memoryKib - 1 };
+  it.each([
+    ["memoryKib", { ...KDF_MINIMUM, memoryKib: KDF_MINIMUM.memoryKib - 1 }],
+    ["iterations", { ...KDF_MINIMUM, iterations: KDF_MINIMUM.iterations - 1 }],
+    ["parallelism", { ...KDF_MINIMUM, parallelism: KDF_MINIMUM.parallelism - 1 }]
+  ])("rejects %s below the enforced minimum", async (_axis, weak) => {
     expect(isAtLeastMinimum(weak)).toBe(false);
+    expect(isValidKdfParams(weak)).toBe(false);
     await expect(deriveKek("x", new Uint8Array(16), weak)).rejects.toThrow(RangeError);
   });
 
-  it("accepts the minimum itself", () => {
+  it.each([
+    ["memoryKib", { ...KDF_DEFAULT, memoryKib: KDF_MAXIMUM.memoryKib + 1 }],
+    ["iterations", { ...KDF_DEFAULT, iterations: KDF_MAXIMUM.iterations + 1 }],
+    ["parallelism", { ...KDF_DEFAULT, parallelism: KDF_MAXIMUM.parallelism + 1 }],
+    ["non-integer memoryKib", { ...KDF_DEFAULT, memoryKib: 65536.5 }]
+  ])("rejects %s outside the allowed range", async (_axis, bad) => {
+    expect(isValidKdfParams(bad)).toBe(false);
+    await expect(deriveKek("x", new Uint8Array(16), bad)).rejects.toThrow(RangeError);
+  });
+
+  it("accepts the minimum, the default and the maximum", () => {
     expect(isAtLeastMinimum(KDF_MINIMUM)).toBe(true);
-    expect(isAtLeastMinimum(KDF_DEFAULT)).toBe(true);
+    expect(isValidKdfParams(KDF_MINIMUM)).toBe(true);
+    expect(isValidKdfParams(KDF_DEFAULT)).toBe(true);
+    expect(isValidKdfParams(KDF_MAXIMUM)).toBe(true);
   });
 });

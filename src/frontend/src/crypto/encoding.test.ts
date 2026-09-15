@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { concat, fromBase64, fromHex, timingSafeEqual, toBase64, toHex, utf8Decode, utf8Encode, wipe } from "./encoding";
+import { concat, fromBase64, fromHex, toBase64, toHex, utf8Decode, utf8Encode, wipe } from "./encoding";
 
 describe("encoding", () => {
   it("round-trips base64", () => {
@@ -25,12 +25,9 @@ describe("encoding", () => {
     expect(() => utf8Decode(fromHex("ff"))).toThrow();
   });
 
-  it("concatenates and compares in constant time", () => {
+  it("concatenates", () => {
     const joined = concat(fromHex("01"), fromHex("0203"), new Uint8Array(0));
     expect(toHex(joined)).toBe("010203");
-    expect(timingSafeEqual(joined, fromHex("010203"))).toBe(true);
-    expect(timingSafeEqual(joined, fromHex("010204"))).toBe(false);
-    expect(timingSafeEqual(joined, fromHex("0102"))).toBe(false);
   });
 
   it("wipes buffers in place", () => {

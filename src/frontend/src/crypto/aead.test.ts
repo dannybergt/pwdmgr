@@ -55,13 +55,14 @@ describe("aead (AES-256-GCM)", () => {
     await expect(importAeadKey(randomBytes(16))).rejects.toThrow(RangeError);
   });
 
-  it("uses a fresh nonce per seal (10k distinct)", async () => {
+  // Sanity check against a broken RNG only; no statistical power against a 2^96 space.
+  it("uses a fresh nonce per seal (1k distinct)", async () => {
     const key = await generateAeadKey();
     const nonces = new Set<string>();
-    for (let i = 0; i < 10_000; i += 1) {
+    for (let i = 0; i < 1_000; i += 1) {
       const blob = await aeadSeal(key, new Uint8Array(0), aad);
       nonces.add(toHex(blob.subarray(0, AEAD_NONCE_LENGTH)));
     }
-    expect(nonces.size).toBe(10_000);
-  }, 60_000);
+    expect(nonces.size).toBe(1_000);
+  }, 30_000);
 });

@@ -73,18 +73,6 @@ export function randomBytes(length: number): Bytes {
   return bytes;
 }
 
-/** Constant-time comparison for equal-length byte arrays. */
-export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    diff |= a[i] ^ b[i];
-  }
-  return diff === 0;
-}
-
 /** Overwrite key material in place once it is no longer needed. */
 export function wipe(bytes: Uint8Array): void {
   bytes.fill(0);

@@ -4,6 +4,10 @@ import { type Bytes, concat } from "./encoding";
  * AES-256-GCM with additional authenticated data. Wire format of a sealed blob is
  * `nonce (12 bytes) || ciphertext || tag (16 bytes)`; the AAD is not part of the blob and
  * must be reconstructed by the caller from context (tenant, vault, secret, version).
+ *
+ * Nonces are random 96-bit values. That is safe only while a key seals far fewer than 2^32
+ * messages (NIST SP 800-38D): the design gives every secret version its own DEK and wraps
+ * keys individually, so no key ever sees bulk traffic. Do not reuse one key for many items.
  */
 export const AEAD_KEY_LENGTH = 32;
 export const AEAD_NONCE_LENGTH = 12;
