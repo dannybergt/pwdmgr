@@ -41,3 +41,20 @@ build does not. Tracked in STATE.md (CSP moves to response headers with the web 
 Known noise, not a gap: EF Core 9 logs one `Error`-level `Failed executing DbCommand … __EFMigrationsHistory`
 line on the very first start against an empty database (it probes the history table before creating it).
 It does not recur on restart.
+
+## Slice #4 — local login + server sessions (ADR-0008)
+
+| ID | Goal (source) | Observable criterion | Layer | Proof step | Negative control | Status |
+|---|---|---|---|---|---|---|
+| P4-01 | `dotnet test` green incl. API integration tests (mvp-slice-plan.md, slice #4) | `Pwdmgr.Api.Tests` 9 passed + `Pwdmgr.Infrastructure.Tests` 18 passed, Skipped 0, in the SDK container with `PWDMGR_TEST_PG` | L3 | TESTING.md "Backend database tests" | `CI=true` without variable → Failed | OPEN |
+| P4-02 | Login sets a hardened cookie (ADR-0008) | `curl -c` login → 204, `Set-Cookie: pwdmgr_session=…; HttpOnly; SameSite=Strict; Path=/`; `Secure` present when `Auth:CookieSecurePolicy=Always` or the request is https | L1 | compose stack, `curl -v` | wrong password → 401, no `Set-Cookie` | OPEN |
+| P4-03 | Rate limit per client + e-mail | 11th attempt within a minute → 429 (`Auth:LoginRateLimitPermits` default 10); another e-mail from the same client still 401 | L1 | curl loop | after the window a login succeeds again | OPEN |
+| P4-04 | **Session expiry actually happens** (nex-im lesson) | compose override `Auth__SessionTtl=00:00:20`; login, `/auth/me` 200, wait 21 s, `/auth/me` 401 | L1 | curl + real wait | before the TTL `/auth/me` is 200 | OPEN |
+| P4-05 | Logout revokes server-side | after `POST /auth/logout` the same cookie gets 401; `sessions.revoked_at` set | L1 + L3 | curl, psql | before logout 200 | OPEN |
+| P4-06 | Storage holds only verifiers | `sessions.token_hash` is 32 bytes and ≠ cookie token; `local_credentials.password_hash` starts with `$argon2id$v=19$m=65536,t=3,p=4$` | L3 | psql | — | OPEN |
+| P4-07 | Logs contain no password and no plaintext e-mail of a login attempt (§6.4) | `docker compose logs api` grep for the seed password and `admin@dev.local` → 0 hits | L1 | grep | the seed log line names only the tenant slug | OPEN |
+| P4-08 | Unknown user / tenant answer in the same latency class as a wrong password | `Wrong_password_and_unknown_user_both_give_401_in_the_same_latency_class` green; curl timings within 3× | L1 | xUnit + `curl -w %{time_total}` | — | OPEN |
+| P4-09 | Cross-origin unsafe request rejected | `POST /auth/login` with `Origin: https://evil.example` → 403; same-origin `Origin` → normal answer | L1 | curl | no `Origin` header → normal answer | OPEN |
+| P4-10 | Tenant query filter isolates data | `Tenant_query_filter_hides_other_tenants_and_everything_without_context` green | L3 | xUnit | `IgnoreQueryFilters()` sees both tenants | OPEN |
+| P4-11 | Running artefact identifies itself | `/api/v1/platform/info` returns `version` (assembly) and `commit` (`PWDMGR_COMMIT`, build arg `GIT_SHA`) | L1 | curl | local compose build → `commit: local` | OPEN |
+

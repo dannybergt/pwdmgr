@@ -94,7 +94,8 @@ Pre-production. Once production exists:
 ## Run-book stubs (to fill before first production deploy)
 
 - [ ] How to apply EF Core migrations safely. Current state: `Database:MigrateOnStartup=true` only in the compose dev stack (`Database__MigrateOnStartup`); production images default to `false` and migrate as an explicit deploy step (ADR-0007).
-- [ ] How to rotate `PWDMGR_PEPPER` (requires re-hash on next login, not full re-encrypt).
+- [ ] How to rotate `PWDMGR_PEPPER` (requires re-hash on next login, not full re-encrypt). Not introduced yet (`pepper_version` = 0).
+- [ ] Session settings: `Auth__SessionTtl` (default 8 h, absolute), `Auth__CookieSecurePolicy` (`Always` default; only the plain-http dev stack uses `SameAsRequest`), `Auth__LoginRateLimitPermits`/`Window`, `Forwarded__KnownNetworks__0` (proxy CIDR; required behind Traefik for correct client addresses and `Secure` cookies). `Seed__Enabled`/`Seed__AdminPassword` are Development-only.
 - [ ] How to rotate `DOCKERHUB_TOKEN`.
 - [ ] How to onboard a new tenant admin.
 - [ ] How to perform M-of-N recovery for a private vault.
