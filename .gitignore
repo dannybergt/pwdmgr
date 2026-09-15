@@ -44,3 +44,6 @@ pgdata/
 redisdata/
 minio-data/
 
+
+# Claude-Code-Worktrees (executor-Subagents, AGENTS.md §4 Phase 3)
+.claude/worktrees/
