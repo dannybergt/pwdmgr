@@ -18,10 +18,16 @@ services:
     build:
       context: ../../
       dockerfile: infra/compose/docker/api.Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-local}
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Postgres: Host=postgres;Database=pwdmgr;Username=pwdmgr;Password=pwdmgr-dev-only
       Database__MigrateOnStartup: "true"
+      Auth__CookieSecurePolicy: SameAsRequest
+      Forwarded__KnownNetworks__0: 172.16.0.0/12
+      Seed__Enabled: "true"
+      Seed__AdminPassword: dev-only-admin-password
     depends_on:
       postgres:
         condition: service_healthy
