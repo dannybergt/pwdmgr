@@ -13,6 +13,7 @@ Architectural Decision Records live in [`docs/adr/`](docs/adr/). One file per de
 | 0005 | [`docs/architecture/product-plan.md` is the single source of truth](docs/adr/0005-product-plan-is-single-source-of-truth.md) | 2026-05-16 | accepted |
 | 0006 | [Argon2id via `hash-wasm`, KDF parameters and minimum](docs/adr/0006-argon2id-hash-wasm-and-kdf-parameters.md) | 2026-09-15 | accepted |
 | 0007 | [EF Core + Npgsql persistence foundation](docs/adr/0007-ef-core-npgsql-persistence-foundation.md) | 2026-09-15 | accepted |
+| 0008 | [Cookie sessions for the web client, Argon2id via Konscious server-side](docs/adr/0008-cookie-sessions-and-argon2-server-side.md) | 2026-09-15 | accepted |
 | 0009 | [X25519 user keys, per-recipient vault-key wrapping, one DEK per secret version](docs/adr/0009-x25519-keyring-and-key-wrapping.md) | 2026-09-15 | accepted |
 
 ## Proposed / under discussion

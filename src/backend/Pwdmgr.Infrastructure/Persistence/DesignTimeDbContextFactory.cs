@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Pwdmgr.Application.Auth;
 
 namespace Pwdmgr.Infrastructure.Persistence;
 
@@ -12,6 +13,6 @@ internal sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<P
             .UseNpgsql("Host=localhost;Database=pwdmgr-design-time")
             .UseSnakeCaseNamingConvention()
             .Options;
-        return new PwdmgrDbContext(options);
+        return new PwdmgrDbContext(options, new RequestContext());
     }
 }

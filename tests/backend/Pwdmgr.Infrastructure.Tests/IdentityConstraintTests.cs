@@ -54,7 +54,7 @@ public sealed class IdentityConstraintTests(PostgresDatabase db) : IClassFixture
         context.Users.Add(NewUser(tenant, "Dave@Example.test"));
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(await context.Users.AnyAsync(u => u.Email == "dave@example.test", TestContext.Current.CancellationToken));
+        Assert.True(await context.Users.IgnoreQueryFilters().AnyAsync(u => u.Email == "dave@example.test", TestContext.Current.CancellationToken));
 
         context.Users.Add(NewUser(tenant, "dave@example.test"));
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync(TestContext.Current.CancellationToken));
@@ -95,7 +95,7 @@ public sealed class IdentityConstraintTests(PostgresDatabase db) : IClassFixture
         context.Users.AddRange(NewUser(a, "bob@example.test"), NewUser(b, "bob@example.test"));
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, await context.Users.CountAsync(u => u.Email == "bob@example.test", TestContext.Current.CancellationToken));
+        Assert.Equal(2, await context.Users.IgnoreQueryFilters().CountAsync(u => u.Email == "bob@example.test", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -133,10 +133,36 @@ public sealed class IdentityConstraintTests(PostgresDatabase db) : IClassFixture
             Assert.Equal(UniqueViolation, Assert.IsType<PostgresException>(ex.InnerException).SqlState);
         }
 
-        await using (var context = db.CreateContext())
+        await using (var context = db.CreateContext(tenant.Id))
         {
             await context.Users.Where(u => u.Id == user.Id).ExecuteDeleteAsync(TestContext.Current.CancellationToken);
             Assert.False(await context.LocalCredentials.AnyAsync(c => c.UserId == user.Id, TestContext.Current.CancellationToken));
+        }
+    }
+
+    [Fact]
+    public async Task Tenant_query_filter_hides_other_tenants_and_everything_without_context()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        var a = NewTenant();
+        var b = NewTenant();
+        await using (var context = db.CreateContext())
+        {
+            context.Tenants.AddRange(a, b);
+            context.Users.AddRange(NewUser(a, "frank@example.test"), NewUser(b, "grace@example.test"));
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var scoped = db.CreateContext(a.Id))
+        {
+            var emails = await scoped.Users.Select(u => u.Email).ToListAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(["frank@example.test"], emails);
+        }
+
+        await using (var unscoped = db.CreateContext())
+        {
+            Assert.Empty(await unscoped.Users.ToListAsync(TestContext.Current.CancellationToken));
+            Assert.Equal(2, await unscoped.Users.IgnoreQueryFilters().CountAsync(u => u.TenantId == a.Id || u.TenantId == b.Id, TestContext.Current.CancellationToken));
         }
     }
 

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Pwdmgr.Application.Auth;
 using Pwdmgr.Infrastructure.Persistence;
 
 namespace Pwdmgr.Infrastructure.Tests;
@@ -62,17 +63,33 @@ public sealed class PostgresDatabase : IAsyncLifetime
         NpgsqlConnection.ClearAllPools();
         await using var admin = new NpgsqlConnection(adminConnectionString);
         await admin.OpenAsync();
-        await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)", admin);
-        await drop.ExecuteNonQueryAsync();
+        // Several fixtures tear down in parallel on a loaded host; give the drop room and never
+        // let a slow teardown turn a green run red.
+        await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)", admin) { CommandTimeout = 300 };
+        try
+        {
+            await drop.ExecuteNonQueryAsync();
+        }
+        catch (NpgsqlException ex)
+        {
+            Console.Error.WriteLine($"warning: could not drop {databaseName}: {ex.Message}");
+        }
     }
 
-    public PwdmgrDbContext CreateContext()
+    /// <summary>Context scoped to <paramref name="tenantId"/> (tenant query filter active); without one nothing tenant-scoped is visible.</summary>
+    public PwdmgrDbContext CreateContext(Guid? tenantId = null)
     {
         var options = new DbContextOptionsBuilder<PwdmgrDbContext>()
             .UseNpgsql(ConnectionString)
             .UseSnakeCaseNamingConvention()
             .Options;
-        return new PwdmgrDbContext(options);
+        var request = new RequestContext();
+        if (tenantId is { } id)
+        {
+            request.Authenticate(id, Guid.Empty, Guid.Empty);
+        }
+
+        return new PwdmgrDbContext(options, request);
     }
 
     public async Task<IReadOnlyList<string>> ListTablesAsync()

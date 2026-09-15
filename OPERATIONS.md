@@ -51,7 +51,7 @@ To create the PAT: <https://hub.docker.com/settings/security> → "New Access To
 
 | Concern | Tooling | Status |
 |---|---|---|
-| Structured logs (JSON, UTC ISO-8601, request ID) | ASP.NET Core `JsonConsole` with scopes | implemented (API) |
+| Structured logs (JSON, UTC ISO-8601, request ID) | ASP.NET Core `JsonConsole` with scopes; audit category `Pwdmgr.Audit.Auth` (login/logout outcomes, no e-mail/password/token) | implemented (API) |
 | Liveness probe | `GET /health/live` (runs no checks) | implemented |
 | Readiness probe | `GET /health/ready` (Postgres via EF Core check, 503 when down) | implemented |
 | Metrics | Prometheus scrape endpoint `/metrics` | not implemented |
@@ -94,7 +94,8 @@ Pre-production. Once production exists:
 ## Run-book stubs (to fill before first production deploy)
 
 - [ ] How to apply EF Core migrations safely. Current state: `Database:MigrateOnStartup=true` only in the compose dev stack (`Database__MigrateOnStartup`); production images default to `false` and migrate as an explicit deploy step (ADR-0007).
-- [ ] How to rotate `PWDMGR_PEPPER` (requires re-hash on next login, not full re-encrypt).
+- [ ] How to rotate `PWDMGR_PEPPER` (requires re-hash on next login, not full re-encrypt). Not introduced yet (`pepper_version` = 0).
+- [ ] Session settings: `Auth__SessionTtl` (default 8 h, absolute), `Auth__CookieSecurePolicy` (`Always` default; only the plain-http dev stack uses `SameAsRequest`), `Auth__LoginRateLimitPermits`/`Window`/`LoginRateLimitPermitsPerClient`/`MaxConcurrentVerifications`, `Forwarded__KnownNetworks__0` (proxy CIDR; required behind Traefik for correct client addresses and `Secure` cookies). `Seed__Enabled`/`Seed__AdminPassword` are Development-only.
 - [ ] How to rotate `DOCKERHUB_TOKEN`.
 - [ ] How to onboard a new tenant admin.
 - [ ] How to perform M-of-N recovery for a private vault.
