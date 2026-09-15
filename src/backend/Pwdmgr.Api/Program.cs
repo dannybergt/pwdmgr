@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Pwdmgr.Api.Auth;
+using Pwdmgr.Api.Vaults;
 using Pwdmgr.Application;
 using Pwdmgr.Infrastructure;
 
@@ -79,6 +80,8 @@ api.MapGet("/platform/info", () => Results.Ok(new
 }));
 
 api.MapAuth();
+api.MapKeyring();
+api.MapVaults();
 
 await app.Services.InitializeDatabaseAsync();
 

@@ -167,13 +167,15 @@ works either way (`hash-wasm` does not need `crypto.subtle`).
   `citext`), `local_credentials(user_id)`; composite FK rejects a credential pointing into
   another tenant; cascade of credentials on user delete; tenant query filter; Argon2id
   hasher KATs (same frozen vectors as the browser), PHC parsing, decoy hash.
-- `tests/backend/Pwdmgr.Api.Tests` (xUnit v3 + `WebApplicationFactory`, 14 tests): login cookie
+- `tests/backend/Pwdmgr.Api.Tests` (xUnit v3 + `WebApplicationFactory`, 23 tests): login cookie
   flags, case-insensitive e-mail, wrong password / unknown user / unknown tenant → 401 in the
   same latency class, `me` without or with garbage cookie → 401, logout revokes the row,
   **session expiry after a real 3-second TTL**, cross-origin POST → 403, storage holds only
   hashes, rate limit → 429 (own fixture with 5 permits), per-client spraying window → 429,
-  verifier gate → 503, disabled user kills sessions, idempotent logout, session purge keeps
-  recent rows (14 tests). Runs in CI. Verification catalogue:
+  verifier gate → 503, disabled user locks out sessions, idempotent logout, session purge keeps
+  recent rows; keyring enrolment write-once, KDF floor/ceiling → 400, malformed fields → 400
+  without echo, vault needs keyring, vault list per holder, cross-tenant invisibility. Runs in
+  CI. Verification catalogue:
   [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
 - `src/frontend/src/crypto/*.test.ts` (Vitest): 52 tests — Argon2id KATs, two frozen own
   vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper
