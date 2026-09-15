@@ -22,26 +22,26 @@ describe("aead (AES-256-GCM)", () => {
   it("fails when the AAD differs", async () => {
     const key = await generateAeadKey();
     const blob = await aeadSeal(key, utf8Encode("x"), aad);
-    await expect(aeadOpen(key, blob, utf8Encode("tenant=t2"))).rejects.toThrow();
+    await expect(aeadOpen(key, blob, utf8Encode("tenant=t2"))).rejects.toMatchObject({ name: "OperationError" });
   });
 
   it("fails when the ciphertext is tampered with", async () => {
     const key = await generateAeadKey();
     const blob = await aeadSeal(key, utf8Encode("hello"), aad);
     blob[AEAD_NONCE_LENGTH] ^= 0x01;
-    await expect(aeadOpen(key, blob, aad)).rejects.toThrow();
+    await expect(aeadOpen(key, blob, aad)).rejects.toMatchObject({ name: "OperationError" });
   });
 
   it("fails when the tag is tampered with", async () => {
     const key = await generateAeadKey();
     const blob = await aeadSeal(key, utf8Encode("hello"), aad);
     blob[blob.length - 1] ^= 0x80;
-    await expect(aeadOpen(key, blob, aad)).rejects.toThrow();
+    await expect(aeadOpen(key, blob, aad)).rejects.toMatchObject({ name: "OperationError" });
   });
 
   it("fails with a different key", async () => {
     const blob = await aeadSeal(await generateAeadKey(), utf8Encode("hello"), aad);
-    await expect(aeadOpen(await generateAeadKey(), blob, aad)).rejects.toThrow();
+    await expect(aeadOpen(await generateAeadKey(), blob, aad)).rejects.toMatchObject({ name: "OperationError" });
   });
 
   it("rejects blobs shorter than nonce + tag", async () => {
