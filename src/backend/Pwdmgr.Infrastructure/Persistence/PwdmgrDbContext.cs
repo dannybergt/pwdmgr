@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Pwdmgr.Application.Auth;
 using Pwdmgr.Domain.Common;
+using Pwdmgr.Domain.Crypto;
 using Pwdmgr.Domain.Identity;
 using Pwdmgr.Domain.Sessions;
 using Pwdmgr.Domain.Tenants;
+using Pwdmgr.Domain.Vaults;
 
 namespace Pwdmgr.Infrastructure.Persistence;
 
@@ -16,6 +18,12 @@ public sealed class PwdmgrDbContext(DbContextOptions<PwdmgrDbContext> options, I
     public DbSet<LocalCredential> LocalCredentials => Set<LocalCredential>();
 
     public DbSet<Session> Sessions => Set<Session>();
+
+    public DbSet<UserKeyring> UserKeyrings => Set<UserKeyring>();
+
+    public DbSet<Vault> Vaults => Set<Vault>();
+
+    public DbSet<WrappedKey> WrappedKeys => Set<WrappedKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
