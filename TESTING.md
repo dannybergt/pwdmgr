@@ -170,11 +170,16 @@ locally without `node`):
 ```sh
 cd infra/compose && docker compose -p pwdmgr up -d --build       # preflight: ports 8080 and 8443
 cd ../../src/frontend
-docker run --rm --network host --ipc=host -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w:z" -w /w \
+docker run --rm --network pwdmgr_public --ipc=host -u "$(id -u):$(id -g)" -e HOME=/tmp \
+  -e E2E_BASE_URL=https://reverse-proxy:8443 -v "$PWD:/w:z" -w /w \
   mcr.microsoft.com/playwright:v1.63.0-noble sh -c 'npm ci --no-fund --ignore-scripts && npx playwright test'
 ```
 
-Defaults: `E2E_BASE_URL=https://localhost:8443`, the dev seed user (`E2E_PASSWORD` must equal
+The browser joins the stack's `public` network and talks to Traefik by service name: on a
+host with many containers coming and going, `--network host` intermittently fails with
+`net::ERR_NETWORK_CHANGED` (observed 2/2 on dev-claude), inside the compose network it does not.
+
+Defaults: `E2E_BASE_URL=https://localhost:8443` (CI, where Playwright runs on the runner), the dev seed user (`E2E_PASSWORD` must equal
 `SEED_ADMIN_PASSWORD` from `infra/compose/.env`; CI passes it through), a deterministic
 `E2E_PASSPHRASE` so repeated runs against the same dev database take the unlock path. To force
 the enrolment path, empty the vault tables of the dev database first (psql on the compose
@@ -186,7 +191,7 @@ the enrolment path, empty the vault tables of the dev database first (psql on th
   Library, jsdom): login error/429 display and `credentials: include`, wrong passphrase rejected
   with no request carrying it, enrolment validation, idle lock with fake timers and storage/cookie/
   IndexedDB spies, passphrase strength policy (zxcvbn, offline), vault recreated on unlock after an
-  interrupted enrolment (11 tests).
+  interrupted enrolment, retry after a failed keyring load (12 tests).
 - `src/frontend/e2e/vault.spec.ts` (Playwright, 2 tests): golden path + wrong passphrase, see
   above. Runs in the CI `e2e` job.
 
@@ -198,7 +203,7 @@ the enrolment path, empty the vault tables of the dev database first (psql on th
   cross-tenant wrapped keys rejected by FK, user delete cascades sessions/keyring/wrapped keys, a
   vault with secrets cannot be deleted, secret delete cascades versions, version uniqueness, blob
   size checks, KDF floor enforced by the database.
-- `tests/backend/Pwdmgr.Api.Tests` (xUnit v3 + `WebApplicationFactory`, 33 tests): login cookie
+- `tests/backend/Pwdmgr.Api.Tests` (xUnit v3 + `WebApplicationFactory`, 40 tests): login cookie
   flags, case-insensitive e-mail, wrong password / unknown user / unknown tenant → 401 in the
   same latency class, `me` without or with garbage cookie → 401, logout revokes the row,
   **session expiry after a real 3-second TTL**, cross-origin POST → 403, storage holds only
@@ -209,7 +214,8 @@ the enrolment path, empty the vault tables of the dev database first (psql on th
   create/list/latest/new version/soft delete chain with client-chosen ids and version contract,
   foreign vault/secret → 404 (same and other tenant), 64 KiB payload limit → 413, malformed
   fields → 400; account-wide failure budget across client addresses, session replacement on
-  login, no-store/nosniff/no Server header, per-user write limit. Runs in CI. Verification catalogue:
+  login, no-store/nosniff/no Server header, per-user write limit; malformed JSON bodies → 400
+  in a Development-environment fixture (`MalformedBodyTests`, 7 cases incl. unauthenticated login). Runs in CI. Verification catalogue:
   [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
 - `src/frontend/src/crypto/*.test.ts` (Vitest): 52 tests — Argon2id KATs, two frozen own
   vectors, NFKC normalisation, parameter floor/ceiling, HKDF KATs, AES-GCM round-trip and tamper
