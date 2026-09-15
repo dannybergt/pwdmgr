@@ -94,3 +94,23 @@ It does not recur on restart.
 | P3-05 | Error paths leak no key material | thrown messages contain no hex ≥ 32 chars, no base64 blobs; grep `console\.` in `src/crypto` → 0 | L0 + L3 | test `rejects a wrong passphrase…` + grep | — | PROVEN cd2f5cd (0 hits in src/crypto; 7 error paths → `KeyringError` without hex/base64 in message or stack; bench/ control hits 3) |
 | P3-06 | Production build still green with the WASM CSP | `npm run build` exit 0, `script-src 'self' 'wasm-unsafe-eval'` unchanged | L3 | build + grep | — | PROVEN cd2f5cd (`script-src 'self' 'wasm-unsafe-eval'`, single hit; mutated copy hits `'unsafe-eval'`) |
 
+## Slices #7/#8/#9 — web client (login → enrol/unlock → lock, create/show secret), web image + TLS
+
+| ID | Goal (source) | Observable criterion | Layer | Proof step | Negative control | Status |
+|---|---|---|---|---|---|---|
+| P7-01 | Vitest green incl. component tests (mvp-slice-plan.md, slice #7) | `npm test` → 60 passed (login errors, wrong passphrase without network, enrolment validation, session idle lock) | L3 | `node:24-alpine npm test` | — | OPEN |
+| P7-02 | **Golden path in a real browser**: login → enrol → create secret → reload → unlock → read | `npm run e2e` (Playwright, `E2E_BASE_URL=https://localhost:8443`) → 2 passed against the compose stack; both the enrol path (fresh dev DB) and the unlock path (second run) | L2 | TESTING.md "End-to-end" recipe | wrong passphrase → alert, no request | OPEN |
+| P7-03 | No request carries the passphrase or derived material | e2e route interceptor: no `/api/` request body/URL contains the passphrase or the secret marker; additionally the verifier greps `pg_dump`, API logs and Traefik logs for the marker → 0 hits | L2 + L3 | e2e + `pg_dump \| grep` | grep for the base64 payload prefix hits | OPEN |
+| P7-04 | Nothing persisted in the browser | after unlock `localStorage`/`sessionStorage` empty (e2e asserts), IndexedDB has no pwdmgr database | L2 | e2e + `indexedDB.databases()` | — | OPEN |
+| P7-05 | Reload → locked again, session kept | e2e: after `page.reload()` the unlock screen appears (no vault data), no re-login needed | L2 | e2e | — | OPEN |
+| P7-06 | Wrong passphrase → error without server request | e2e test 2: alert `Wrong passphrase.`, request count unchanged | L2 | e2e | — | OPEN |
+| P7-07 | Console free of errors | e2e collects console errors; only the designed 401/404 probes appear | L2 | e2e | — | OPEN |
+| P7-08 | **Session expiry in the UI** (nex-im lesson) | compose override `Auth__SessionTtl=00:01:00`; after login + unlock wait 61 s, next action → app falls back to `/login`, no hang | L2 | Playwright with real wait | before the TTL the action succeeds | OPEN |
+| P7-09 | Idle lock | `IDLE_LOCK_MS` = 10 min (unit test with fake timers); UI-level: not proven with a real wait (documented) | L3 | Vitest `vaultSession.test.ts` | activity resets the timer | OPEN |
+| P8-01 | Create → reload → unlock → read a secret; reveal toggle | e2e reads the marker back after reload+unlock; `password-value` masked until Reveal | L2 | e2e | — | OPEN |
+| P8-02 | Second browser context of the same user sees the secret only after unlocking there | new Playwright context with the same server session cookie → `/unlock`, no secret visible before unlock | L2 | Playwright | — | OPEN |
+| P9-01 | Web image serves the client with security headers | `docker compose up --build` → `https://localhost:8443/` 200 with `Content-Security-Policy` (no `'unsafe-eval'`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`; `/assets/*` immutable cache; unknown path → `index.html` (SPA) | L1 | curl -kI | — | OPEN |
+| P9-02 | TLS entrypoint gives a secure context and Secure cookies | `https://localhost:8443` (self-signed default cert): login `Set-Cookie … secure`; `window.isSecureContext === true` in Chromium | L1 + L2 | curl -k, e2e | over `http://localhost:8080` the cookie has no `secure` (dev only) | OPEN |
+| P9-03 | Image runs unprivileged | `docker compose exec web id` → uid 101 (nginx), not root; API container runs as `$APP_UID` | L3 | docker exec | — | OPEN |
+| P9-04 | CI covers it | `docker-web` job builds (and pushes on main) `dbergt/pwdmgr-web`; `e2e` job runs the Playwright golden path against the compose stack | L1 | GitHub Actions run | — | OPEN |
+

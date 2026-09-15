@@ -20,8 +20,8 @@ All images publish to Docker Hub namespace `dbergt`. Naming convention is `dberg
 
 | Image | Status | Source |
 |---|---|---|
-| `dbergt/pwdmgr-api` | wiring up in current session | `infra/compose/docker/api.Dockerfile` |
-| `dbergt/pwdmgr-web` | planned | follows with first frontend slice |
+| `dbergt/pwdmgr-api` | live | `infra/compose/docker/api.Dockerfile` |
+| `dbergt/pwdmgr-web` | live from the web slice | `infra/compose/docker/web.Dockerfile` (nginx-unprivileged, static client) |
 | `dbergt/pwdmgr-worker` | planned | follows with LDAP sync / rotation worker |
 | `dbergt/pwdmgr-agent-gateway` | planned | may stay merged into `pwdmgr-api` until extraction is justified |
 
@@ -93,6 +93,7 @@ Pre-production. Once production exists:
 
 ## Run-book stubs (to fill before first production deploy)
 
+- [ ] TLS: the compose stack terminates TLS at Traefik on `:8443` with Traefik's built-in self-signed default certificate (browsers warn; `ignoreHTTPSErrors` for automation). **The web client needs a secure context (WebCrypto)** — plain `http://<host>:8080` only works on `localhost`. Production: mount a real certificate (Traefik `tls.certificates` in the dynamic file or ACME) and remove the `:8080` http routers.
 - [ ] How to apply EF Core migrations safely. Current state: `Database:MigrateOnStartup=true` only in the compose dev stack (`Database__MigrateOnStartup`); production images default to `false` and migrate as an explicit deploy step (ADR-0007).
 - [ ] How to rotate `PWDMGR_PEPPER` (requires re-hash on next login, not full re-encrypt). Not introduced yet (`pepper_version` = 0).
 - [ ] Session settings: `Auth__SessionTtl` (default 8 h, absolute), `Auth__CookieSecurePolicy` (`Always` default; only the plain-http dev stack uses `SameAsRequest`), `Auth__LoginRateLimitPermits`/`Window`/`LoginRateLimitPermitsPerClient`/`MaxConcurrentVerifications`, `Forwarded__KnownNetworks__0` (proxy CIDR; required behind Traefik for correct client addresses and `Secure` cookies). `Seed__Enabled`/`Seed__AdminPassword` are Development-only.

@@ -33,8 +33,8 @@ Last update: 2026-09-15
 | Pure functions / hooks | Unit | Vitest | yes |
 | Components | Component test | Vitest + Testing Library | yes |
 | Crypto primitives (Argon2id KDF, HKDF, AES-GCM) | Known-answer + round-trip | Vitest (Node 24 WebCrypto + `hash-wasm`), Chromium run for the KDF benchmark | yes |
-| Unlock flow (login → MFA → passphrase) | E2E | Playwright | yes |
-| Vault CRUD (ciphertext only over the wire) | E2E | Playwright | yes |
+| Unlock flow (login → passphrase; MFA later) | E2E | Playwright (`src/frontend/e2e`) | yes |
+| Vault CRUD (ciphertext only over the wire) | E2E | Playwright (`src/frontend/e2e`, route interceptor) | yes |
 
 ### Browser extension
 
@@ -159,7 +159,33 @@ run the Playwright container with `--network container:pwdmgr-bench-web` and ope
 `http://localhost:5173/`, or terminate TLS in front of the dev server. The Argon2 bench page
 works either way (`hash-wasm` does not need `crypto.subtle`).
 
+## End-to-end (Playwright) against the compose stack
+
+`src/frontend/e2e/vault.spec.ts` drives the real client in headless Chromium: login → enrol
+(or unlock) → create a secret → reload → unlock → read it back, asserting that no `/api/`
+request carries the passphrase or the plaintext marker, that browser storage stays empty and
+that the page is a secure context. It runs against an already started stack (CI job `e2e`;
+locally without `node`):
+
+```sh
+cd infra/compose && docker compose -p pwdmgr up -d --build       # preflight: ports 8080 and 8443
+cd ../../src/frontend
+docker run --rm --network host --ipc=host -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w:z" -w /w \
+  mcr.microsoft.com/playwright:v1.63.0-noble sh -c 'npm ci --no-fund --ignore-scripts && npx playwright test'
+```
+
+Defaults: `E2E_BASE_URL=https://localhost:8443`, the dev seed user, a deterministic
+`E2E_PASSPHRASE` so repeated runs against the same dev database take the unlock path. To force
+the enrolment path, empty the vault tables of the dev database first (psql on the compose
+`postgres` service: `user_keyrings`, `vaults`, `wrapped_keys`, `secrets`, `secret_versions`).
+
 ## Current state of tests
+
+- `src/frontend/src/pages/*.test.tsx`, `src/session/vaultSession.test.ts` (Vitest + Testing
+  Library, jsdom): login error/429 display and `credentials: include`, wrong passphrase rejected
+  with no request carrying it, enrolment validation, idle lock with fake timers (8 tests).
+- `src/frontend/e2e/vault.spec.ts` (Playwright, 2 tests): golden path + wrong passphrase, see
+  above. Runs in the CI `e2e` job.
 
 - `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3, 18 tests): migrations `Identity` +
   `Sessions` apply on a fresh database, second apply is a no-op, rollback to `0` and forward
