@@ -41,3 +41,15 @@ build does not. Tracked in STATE.md (CSP moves to response headers with the web 
 Known noise, not a gap: EF Core 9 logs one `Error`-level `Failed executing DbCommand … __EFMigrationsHistory`
 line on the very first start against an empty database (it probes the history table before creating it).
 It does not recur on restart.
+
+## Slice #3 — keyring crypto (ADR-0009)
+
+| ID | Goal (source) | Observable criterion | Layer | Proof step | Negative control | Status |
+|---|---|---|---|---|---|---|
+| P3-01 | Vitest green in Node 24 (mvp-slice-plan.md, slice #3) | `npm test` → 49 passed (10 keyring tests), exit 0 | L3 | `docker run … node:24-alpine sh -c 'npm test'` | flip a byte of the frozen wrap KAT → exactly that test fails | OPEN |
+| P3-02 | Enrol → lock → unlock round-trip; wrong KEK → `KeyringError` without key material | keyring tests `round-trips…`, `rejects a wrong passphrase…`, `binds the private key to the user id` green | L3 | `npm test` | — | OPEN |
+| P3-03 | Wrap/unwrap KAT frozen | RFC 7748 keys + frozen blob unwrap to `00..1f`; recipient/context/tamper variants rejected | L3 | `npm test` | flipped ephemeral byte → `KeyringError` | OPEN |
+| P3-04 | **X25519 WebCrypto works in a real browser** (Node support is no proof) | in headless Chromium, `import("/src/crypto/keyring.ts")` then enrol/unlock/wrap/unwrap round-trip and the frozen KAT unwrap succeed; console errors `[]` | L2 | Playwright page against `vite dev` (TESTING.md recipe) | wrong passphrase in-page → `KeyringError` | OPEN |
+| P3-05 | Error paths leak no key material | thrown messages contain no hex ≥ 32 chars, no base64 blobs; grep `console\.` in `src/crypto` → 0 | L0 + L3 | test `rejects a wrong passphrase…` + grep | — | OPEN |
+| P3-06 | Production build still green with the WASM CSP | `npm run build` exit 0, `script-src 'self' 'wasm-unsafe-eval'` unchanged | L3 | build + grep | — | OPEN |
+
