@@ -89,6 +89,9 @@ if (!app.Environment.IsDevelopment() && !builder.Configuration.GetSection("Forwa
 
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+// Body-less error responses (framework 400s, the 401 challenge, 429 from the limiter) get a
+// ProblemDetails body with traceId, so every /api error is correlatable (OPERATIONS.md).
+app.UseStatusCodePages();
 
 // API responses are never cacheable and never sniffed — as middleware, so the headers also reach
 // responses no endpoint produced (binding failures → 400, 401 from the handler, 429 from the limiter).

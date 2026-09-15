@@ -28,6 +28,9 @@ public sealed class MalformedBodyTests(DevelopmentApiFactory factory) : IClassFi
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
         Assert.DoesNotContain(factory.Logs, entry => entry.Level >= LogLevel.Error);
+        var problem = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("traceId", problem);
+        Assert.DoesNotContain("not json", problem);
     }
 
     [Fact]
