@@ -30,6 +30,14 @@ back, and is testable on a real Postgres. The product plan fixes Postgres as the
 - **Base classes:** `Entity` (`Id`, `CreatedAt`, `UpdatedAt`) and `TenantScopedEntity : Entity`
   (`TenantId`). `Tenant` derives from `Entity` — it previously inherited a `TenantId` it should
   never have had.
+- **Tenant-scoped child tables reference their parent through a composite key.** `users`
+  carries an alternate key `(tenant_id, id)`; `local_credentials` has its FK on
+  `(tenant_id, user_id)` against it. The database itself therefore rejects a child row that
+  points into another tenant — this is the convention for every tenant-scoped relation that
+  follows (keyrings, vaults, secrets), independent of the EF query filter and RLS.
+- **E-mail is `citext`.** Uniqueness `(tenant_id, email)` and lookups are case-insensitive at
+  the database level (`CREATE EXTENSION citext`, trusted extension since PG 13, present in the
+  official image). Slice #4 must not re-implement normalisation differently.
 - **`LocalCredential` stores only `password_hash` (PHC string) and `pepper_version`.** The
   slice plan listed a separate `password_params` column; the PHC format
   (`$argon2id$v=19$m=..,t=..,p=..$salt$hash`) already carries the parameters, so a second
@@ -40,7 +48,8 @@ back, and is testable on a real Postgres. The product plan fixes Postgres as the
 - **Logging:** built-in `JsonConsole` with UTC ISO 8601 timestamps and scopes (request id,
   path); EF command logging at `Warning` so connection strings and SQL never reach normal logs.
 - **Tests on a real Postgres via `PWDMGR_TEST_PG`**, one throw-away database per test class,
-  xUnit v3 dynamic skip when unset. No Testcontainers (Docker socket inside the SDK container
+  xUnit v3 dynamic skip when unset — except under `CI=true`, where a missing variable fails
+  the tests instead of skipping them silently. No Testcontainers (Docker socket inside the SDK container
   under SELinux is an extra failure source; TESTING.md updated).
 
 ## Consequences

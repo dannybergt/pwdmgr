@@ -101,7 +101,8 @@ Every PR must:
 Integration tests need a real Postgres. They read the admin connection string from
 `PWDMGR_TEST_PG`, create one throw-away database per test class (`pwdmgr_test_<guid>`) and
 drop it afterwards. When the variable is unset the tests are **skipped** (xUnit v3 dynamic
-skip) — CI always sets it, so a skip there is a configuration error, not a pass.
+skip); under `CI=true` (GitHub Actions sets it) a missing variable **fails** the tests, so a
+lost service container can never turn into a green job with zero database coverage.
 
 Testcontainers is deliberately not used: the Docker socket inside the SDK container under
 SELinux is an extra failure source, and one plain container on its own network does the job.
@@ -122,8 +123,10 @@ docker run --rm --network pwdmgr-test -u "$(id -u):$(id -g)" -e HOME=/tmp -e DOT
 
 ## Current state of tests
 
-- `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3): migration `Identity` apply on a fresh
-  database, second apply is a no-op, rollback to `0` and forward again; unique constraints
-  `tenants(slug)`, `users(tenant_id, email)`, `local_credentials(user_id)`; cascade of
-  credentials on user delete. Runs in CI.
+- `tests/backend/Pwdmgr.Infrastructure.Tests` (xUnit v3, 8 tests): migration `Identity` apply on
+  a fresh database, second apply is a no-op, rollback to `0` and forward again; unique
+  constraints `tenants(slug)`, `users(tenant_id, email)` (case-insensitive via `citext`),
+  `local_credentials(user_id)`; composite FK rejects a credential pointing into another tenant;
+  cascade of credentials on user delete. Runs in CI. Verification catalogue:
+  [`docs/verification/zielkatalog.md`](docs/verification/zielkatalog.md).
 - No frontend test project yet (arrives with the crypto slice #1).
