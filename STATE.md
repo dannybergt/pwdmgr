@@ -6,7 +6,7 @@ Last update: 2026-09-15
 
 ## Snapshot
 
-- **Phase:** MVP wave 1 complete on feature branches, PRs pending. Slice #2 (persistence foundation, ADR-0007) on `feature/persistence-foundation`; slice #1 (crypto primitives + Argon2id benchmark, ADR-0006) on `feature/crypto-primitives`, stacked on #2. Plan: [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md).
+- **Phase:** MVP wave 1 complete on feature branches; PRs #24 (persistence) and #25 (crypto, stacked on #24) open, CI green on both, merge awaiting `FREIGABE`. Slice #2 (persistence foundation, ADR-0007) on `feature/persistence-foundation`; slice #1 (crypto primitives + Argon2id benchmark, ADR-0006) on `feature/crypto-primitives`, stacked on #2. Plan: [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md).
 - **Branch:** `main`. 2026-09-14: PR [#3](https://github.com/dannybergt/pwdmgr/pull/3) (dependency pins) plus Dependabot batch (#4, #6, #7, #9, #10, #13, #15) and #12/#20 squash-merged on `FREIGABE`. CI green on all five jobs. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1).
 - **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC).
 - **DockerHub namespace:** `dbergt`. **`dbergt/pwdmgr-api` is live** — first multi-arch push (`amd64` + `arm64`) at `:main` and `:sha-b41cfde`. <https://hub.docker.com/r/dbergt/pwdmgr-api>. Other images (`pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway`) follow with their respective service slices.
@@ -53,7 +53,7 @@ GitHub Actions secrets configured (verified 2026-05-16):
 
 ## Open threads / next steps
 
-- [ ] MVP slices per [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md). **#2 done** (PR pending): EF Core + Npgsql, `tenants`/`users`/`local_credentials`, migration `Identity`, readiness check, JSON logs, 8 DB tests, ADR-0007, verification catalogue `docs/verification/zielkatalog.md`. **#1 done** (PR pending, stacked on #2): `src/frontend/src/crypto/{encoding,kdf,hkdf,aead}.ts`, 39 Vitest tests, benchmark, ADR-0006. **Next: wave 2** — #4 local login + sessions (ADR-0008, critical path) ∥ #3 keyring crypto (X25519, ADR-0009).
+- [ ] MVP slices per [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md). **#2 done** (PR [#24](https://github.com/dannybergt/pwdmgr/pull/24), CI green): EF Core + Npgsql, `tenants`/`users`/`local_credentials`, migration `Identity`, readiness check, JSON logs, 8 DB tests, ADR-0007, verification catalogue `docs/verification/zielkatalog.md`. **#1 done** (PR [#25](https://github.com/dannybergt/pwdmgr/pull/25), stacked on #24, CI green): `src/frontend/src/crypto/{encoding,kdf,hkdf,aead}.ts`, 39 Vitest tests, benchmark, ADR-0006. **Next: wave 2** — #4 local login + sessions (ADR-0008, critical path) ∥ #3 keyring crypto (X25519, ADR-0009).
 - [ ] `/api/v1/platform/info` carries no version field; add one so the verifier can identify the running artefact (verifier finding).
 - [ ] Add Dockerfiles for `pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway` when their services have real content (do NOT add empty placeholder containers — see Constitution §2.5 YAGNI).
 - [ ] Decide trademark / domain status for the product working name `Privora` (ADR-0003).
