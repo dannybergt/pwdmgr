@@ -18,4 +18,10 @@ public sealed class AuthOptions
     public int LoginRateLimitPermits { get; set; } = 10;
 
     public TimeSpan LoginRateLimitWindow { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>Login attempts allowed per client address across all accounts within the window (spraying guard).</summary>
+    public int LoginRateLimitPermitsPerClient { get; set; } = 30;
+
+    /// <summary>Argon2 verifications allowed to run at the same time; 0 = processor count.</summary>
+    public int MaxConcurrentVerifications { get; set; } = Environment.ProcessorCount;
 }
