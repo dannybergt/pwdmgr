@@ -26,7 +26,8 @@ A second decision is the server-side password verifier for local users. Slice pl
   stack sets `SameAsRequest`).
 - Every request is authenticated by hashing the cookie and loading the row joined with an
   **active** user and tenant; expiry, revocation and disabling a user/tenant are therefore
-  immediate and server-side. `POST /auth/logout` revokes (idempotent, always clears the cookie);
+  immediate and server-side (a disabled user's sessions are not revoked but rejected on every
+  request; re-enabling makes them valid again unless revoked). `POST /auth/logout` revokes (idempotent, always clears the cookie);
   `GET /auth/me` returns the principal. Absolute TTL (`Auth:SessionTtl`, 8 h default), no sliding
   renewal. `last_seen_at` is written at most once per minute; `SessionPurgeService` deletes rows
   expired or revoked more than 7 days ago (hourly), so the table stays bounded while recent

@@ -59,16 +59,17 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
         // Warm-up so JIT and connection setup do not skew the comparison.
         await client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, "wrong"), TestContext.Current.CancellationToken);
 
-        var wrong = await Time(() => client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, "wrong"), TestContext.Current.CancellationToken));
-        var unknown = await Time(() => client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, "nobody@example.test", "wrong"), TestContext.Current.CancellationToken));
-        var badTenant = await Time(() => client.PostAsJsonAsync(Login, new LoginRequest("no-such-tenant", ApiFactory.Email, ApiFactory.Password), TestContext.Current.CancellationToken));
+        // Minimum of three samples each: the floor is the Argon2 cost, the rest is host noise.
+        var wrong = await MinOf3(() => client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, "wrong"), TestContext.Current.CancellationToken));
+        var unknown = await MinOf3(() => client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, "nobody@example.test", "wrong"), TestContext.Current.CancellationToken));
+        var badTenant = await MinOf3(() => client.PostAsJsonAsync(Login, new LoginRequest("no-such-tenant", ApiFactory.Email, ApiFactory.Password), TestContext.Current.CancellationToken));
 
         Assert.Equal(HttpStatusCode.Unauthorized, wrong.Response.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, unknown.Response.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, badTenant.Response.StatusCode);
         Assert.DoesNotContain("Set-Cookie", wrong.Response.Headers.Select(h => h.Key));
 
-        // Both paths run the Argon2 verifier (~0.3-1 s); an unknown user must not be an order of magnitude faster.
+        // All paths run the Argon2 verifier (~0.3-1 s); an unknown user must not be an order of magnitude faster.
         Assert.True(unknown.Elapsed > wrong.Elapsed / 3, $"unknown user answered in {unknown.Elapsed.TotalMilliseconds} ms vs {wrong.Elapsed.TotalMilliseconds} ms for a wrong password");
         Assert.True(badTenant.Elapsed > wrong.Elapsed / 3, $"unknown tenant answered in {badTenant.Elapsed.TotalMilliseconds} ms vs {wrong.Elapsed.TotalMilliseconds} ms");
     }
@@ -107,24 +108,6 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
         await using var db = factory.CreateDbContext(factory.TenantId);
         var session = await db.Sessions.SingleAsync(s => s.TokenHash == tokenHash, TestContext.Current.CancellationToken);
         Assert.NotNull(session.RevokedAt);
-    }
-
-    [Fact]
-    public async Task Expired_session_is_rejected_after_the_ttl_really_passes()
-    {
-        PostgresDatabase.SkipUnlessConfigured();
-        using var client = factory.CreateApiClient();
-        var cookie = await LoginAsync(client);
-
-        using var before = new HttpRequestMessage(HttpMethod.Get, Me);
-        before.Headers.Add("Cookie", cookie);
-        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(before, TestContext.Current.CancellationToken)).StatusCode);
-
-        await Task.Delay(factory.SessionTtl + TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
-
-        using var after = new HttpRequestMessage(HttpMethod.Get, Me);
-        after.Headers.Add("Cookie", cookie);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(after, TestContext.Current.CancellationToken)).StatusCode);
     }
 
     [Fact]
@@ -169,10 +152,47 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
 
     private static string CookiePair(string setCookie) => setCookie.Split(';', 2)[0];
 
-    private static async Task<(HttpResponseMessage Response, TimeSpan Elapsed)> Time(Func<Task<HttpResponseMessage>> call)
+    private static async Task<(HttpResponseMessage Response, TimeSpan Elapsed)> MinOf3(Func<Task<HttpResponseMessage>> call)
     {
-        var sw = Stopwatch.StartNew();
-        var response = await call();
-        return (response, sw.Elapsed);
+        (HttpResponseMessage Response, TimeSpan Elapsed) best = default;
+        for (var i = 0; i < 3; i += 1)
+        {
+            var sw = Stopwatch.StartNew();
+            var response = await call();
+            var elapsed = sw.Elapsed;
+            if (best.Response is null || elapsed < best.Elapsed)
+            {
+                best = (response, elapsed);
+            }
+        }
+
+        return best;
+    }
+}
+
+/// <summary>Own fixture with a 3-second TTL so expiry is observed by really waiting (nex-im lesson).</summary>
+public sealed class SessionExpiryTests(ShortTtlApiFactory factory) : IClassFixture<ShortTtlApiFactory>
+{
+    private static readonly Uri Login = new("/api/v1/auth/login", UriKind.Relative);
+    private static readonly Uri Me = new("/api/v1/auth/me", UriKind.Relative);
+
+    [Fact]
+    public async Task Expired_session_is_rejected_after_the_ttl_really_passes()
+    {
+        PostgresDatabase.SkipUnlessConfigured();
+        using var client = factory.CreateApiClient();
+        var response = await client.PostAsJsonAsync(Login, new LoginRequest(ApiFactory.TenantSlug, ApiFactory.Email, ApiFactory.Password), TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var cookie = response.Headers.GetValues("Set-Cookie").Single().Split(';', 2)[0];
+
+        using var before = new HttpRequestMessage(HttpMethod.Get, Me);
+        before.Headers.Add("Cookie", cookie);
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(before, TestContext.Current.CancellationToken)).StatusCode);
+
+        await Task.Delay(factory.SessionTtl + TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+
+        using var after = new HttpRequestMessage(HttpMethod.Get, Me);
+        after.Headers.Add("Cookie", cookie);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(after, TestContext.Current.CancellationToken)).StatusCode);
     }
 }
