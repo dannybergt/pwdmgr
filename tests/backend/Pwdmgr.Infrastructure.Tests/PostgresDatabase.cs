@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Pwdmgr.Application.Auth;
 using Pwdmgr.Infrastructure.Persistence;
 
 namespace Pwdmgr.Infrastructure.Tests;
@@ -66,13 +67,20 @@ public sealed class PostgresDatabase : IAsyncLifetime
         await drop.ExecuteNonQueryAsync();
     }
 
-    public PwdmgrDbContext CreateContext()
+    /// <summary>Context scoped to <paramref name="tenantId"/> (tenant query filter active); without one nothing tenant-scoped is visible.</summary>
+    public PwdmgrDbContext CreateContext(Guid? tenantId = null)
     {
         var options = new DbContextOptionsBuilder<PwdmgrDbContext>()
             .UseNpgsql(ConnectionString)
             .UseSnakeCaseNamingConvention()
             .Options;
-        return new PwdmgrDbContext(options);
+        var request = new RequestContext();
+        if (tenantId is { } id)
+        {
+            request.Authenticate(id, Guid.Empty, Guid.Empty);
+        }
+
+        return new PwdmgrDbContext(options, request);
     }
 
     public async Task<IReadOnlyList<string>> ListTablesAsync()
