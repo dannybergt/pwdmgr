@@ -1,98 +1,63 @@
+<!-- state: v2 -->
 # STATE — pwdmgr / Privora
 
-> Living, per-session document. Read at session start, update at session end. Source of truth for "what is running, what is open, what is next."
+Format: `docs/state-v2.md` in agent-baseline (headings German by format, content English). History up to 2026-09-18: [`docs/history/STATE-2026.md`](docs/history/STATE-2026.md).
 
-Last update: 2026-09-15
+## Jetzt
 
-## Snapshot
+- **Phase:** post-MVP wave A (slices #10–#14: lint gate, onboarding, shared vaults, web UI) is implemented, reviewed (R/S/ops/migration) and verifier-proven on the local compose stack (P11–P14 PROVEN, Playwright 4/4, catalogue 0 OPEN) — **but only on a local, unpushed branch stack** in `/claude/pwdmgr`. Push + PRs wait for the operator's go.
+- **`main`** = `768f4c0` (measured 2026-09-23): MVP slices #1–#9 (merged 2026-09-15 as #24/#25, #28–#32) plus Dependabot #34/#35/#36/#39 and STATE #40. No release tag (dev-stack defaults: seed admin, self-signed cert).
+- **Local stack** (measured 2026-09-23, none of it on `origin`): `docs/post-mvp-slice-plan` `a17b3b5` → `feature/frontend-lint` `532052e` (#10) → `feature/onboarding-api` `7158c0c` (#11) → `feature/sharing-api` `c0273ae` (#12 + negative controls) → `feature/web-onboarding` `a79d55f` (#13) → `feature/web-sharing` `194b5da` (#14 + follow-ups, 16 commits ahead of `main`). Plan: `docs/developer/post-mvp-slice-plan.md` (on the stack, not on `main`).
+- **Try it:** `cp .env.example .env && docker compose up -d --build` in `infra/compose`, open <https://localhost:8443/>, sign in with the dev seed (server holds ciphertext only).
+- **Images:** `dbergt/pwdmgr-api` and `dbergt/pwdmgr-web` live on Docker Hub, `:main` = `sha-b96b089` (MVP). `pwdmgr-worker` / `pwdmgr-agent-gateway` only once they have real content (§2.5).
+- **Remote:** GitHub `dannybergt/pwdmgr` (public). Actions secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` set (verified 2026-05-16).
+- **Tooling on `dev-claude`:** no `dotnet`/`node` on the host — SDK and `node:24-alpine` containers per TESTING.md; SELinux → bind mounts need `:z`.
 
-- **Phase:** **MVP on `main`** (2026-09-15, `b96b089`): slices #1–#9 merged (PRs #24/#25, then #28 → #29 → #30 → #31 → #32 in order on `FREIGABE`). `cp .env.example .env && docker compose up -d --build` in `infra/compose`, open <https://localhost:8443/>, sign in with the dev seed, choose a passphrase, store a secret, reload, unlock, read it back — the server only ever holds ciphertext. Verification catalogue: 71 rows, none OPEN. No release tag yet (dev-stack defaults: seed admin, self-signed certificate). Plan: [`docs/developer/mvp-slice-plan.md`](docs/developer/mvp-slice-plan.md).
-- **Branch:** `main`. 2026-09-15 (evening): #28 `4bd4116`, #29 `b21c6bd`, #30 `1a054d8`, #31 `555f4c4`, #32 `b96b089` squash-merged in that order; each stacked branch got `main` merged in before its turn (a squash repeats the branch tree under a new SHA, so the conflicts were resolved by taking the branch side — the merged `main` tree equals the verified web tree). CI on `main` green for all five incl. image pushes. 2026-09-15: PRs [#24](https://github.com/dannybergt/pwdmgr/pull/24) and [#25](https://github.com/dannybergt/pwdmgr/pull/25) squash-merged on `FREIGABE`; no release tag (no usable product yet). CI green on `main` for both merges. 2026-09-14: PR [#3](https://github.com/dannybergt/pwdmgr/pull/3) (dependency pins) plus Dependabot batch (#4, #6, #7, #9, #10, #13, #15) and #12/#20 squash-merged on `FREIGABE`. CI green on all five jobs. Foundation merged via PR [#1](https://github.com/dannybergt/pwdmgr/pull/1).
-- **Remote:** GitHub `dannybergt/pwdmgr` (PUBLIC).
-- **DockerHub namespace:** `dbergt`. **`dbergt/pwdmgr-api` is live** — first multi-arch push (`amd64` + `arm64`) at `:main` and `:sha-b41cfde`. <https://hub.docker.com/r/dbergt/pwdmgr-api>. Other images (`pwdmgr-web`, `pwdmgr-worker`, `pwdmgr-agent-gateway`) follow with their respective service slices.
+## Nächster Schritt
 
-## What runs / can run locally
+- [mensch:entscheidung] Go for pushing the local wave-A stack and opening the stacked PRs (docs → #10 … #14, each targeting the previous); PR bodies: regenerate from commit messages + history.
+- [mensch:entscheidung] Product questions to settle in those PRs: one-time password shown on the admin's screen/clipboard (A6); Viewers can see member e-mails; shares arrive without an accept step.
+- [mensch:entscheidung] Order of this STATE-v2 PR vs. the stack: the stack's top commits (`1e0640f`, `194b5da`, `6947c56`, `a17b3b5`) rewrite the old-format `STATE.md` and will conflict — resolve by keeping the v2 file and folding their news into it.
+- [mensch:FREIGABE] Merge the wave-A PRs in order once opened (squash; `main` into the next branch, tree-diff-0 check, close/reopen for CI).
+- [mensch:FREIGABE] Dependabot #42 (build-push-action 7.4.0), #43 (@types/chrome 0.3.0), #44 (postgres 16.14, supersedes closed #41), #45 (frontend minor/patch group) — all CI green and mergeable (measured 2026-09-23).
+- [auto:p2] Node deployment slice `chore/node-deploy` once wave A is on `main`: root `docker-compose.yml` = `include:` of `infra/compose/compose.yaml` + `infra/compose/compose.node.yaml` (published `dbergt/pwdmgr-*:${IMAGE_TAG:-main}`, `build: !reset null`, Watchtower label, `env_file: infra/compose/.env`), node `.env` template (`SEED_ENABLED=false`, `BOOTSTRAP_*`, `PWDMGR_HTTPS_PORT=8447`, `PWDMGR_TRUSTED_PROXIES`), ADR "node runs published images via a root wrapper". Details in the history file ("Next (3)").
+- [mensch:entscheidung] Operator input for the node: outer proxy IP for `PWDMGR_TRUSTED_PROXIES=<ip>/32` (still open as of 2026-09-18).
+- [mensch:FREIGABE] Merge `chore/node-deploy` — git-sync on BC-KI01 rolls it out = production deploy.
+- [betreiber:bc-ki01] Open port 8447 in the Nexainer firewall UI (LAN-CIDR whitelist must include the outer proxy); outer proxy → `https://<node>:8447`, certificate check off; then P14-08 probe.
+- [betreiber:dev-claude] Clean up the dev stack leftovers the guard blocks for agents: `dropdb pwdmgr_copy` inside volume `pwdmgr_pgdata`, and the dangling verifier volume `9f2fa0da11f6…` (`docker volume ls -f dangling=true`) — both still present (measured 2026-09-23).
+- [auto:p3] After wave A: wave B (audit events with hash chain AP-019, vault-key rotation + ownership transfer, NuGet lockfile + `--locked-mode`, CodeQL), then waves C/D as sketched at the end of the post-MVP plan.
+- [mensch:entscheidung] Trademark / domain status of the working name `Privora` (ADR-0003) before any public release.
 
-| Component | Local build status | Notes |
-|---|---|---|
-| Backend (.NET 9) | requires .NET SDK 9.0.100 (pinned in `global.json`) | Not installed on host `dev-claude`; build/test in `mcr.microsoft.com/dotnet/sdk:9.0` with the `pwdmgr-nuget` cache volume (see TESTING.md). CI builds via `setup-dotnet@v6`. |
-| Frontend (React) | requires Node 24 | No `node` on host `dev-claude`; build via `docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/src/frontend:/w:z" -w /w node:24-alpine sh -c 'npm ci && npm test && npm run build'`. KDF benchmark in Chromium: see TESTING.md. |
-| Browser extension | requires Node 24 | Same container pattern with `src/extension`. |
-| Windows agent | requires .NET SDK | Same as backend. |
-| Docker Compose stack | requires Docker | Docker (native) on `dev-claude`; SELinux → bind mounts need `:z`. Project name fixed in the file (`name: pwdmgr`), credentials from `infra/compose/.env` (copy of `.env.example`; on this host the existing `pgdata` volume was initialised with the old dev value `pwdmgr-dev-only` for the Postgres password — set it in `.env` or recreate the volume). Traefik uses a file provider, no Docker socket; all four services have healthchecks and `restart: unless-stopped`. |
+## Offene Threads
 
-## Ports / shared resources (allocated)
+- Local stack unpushed since 2026-09-15/18; the node deployment is blocked on it (otherwise the node would run the MVP without sharing/onboarding).
+- CI `e2e` job runs all specs against a fresh DB (seed admin, deterministic passphrase); local spec runs against the long-lived volume need a fresh TenantAdmin via `E2E_EMAIL`/`E2E_PASSWORD` (TESTING.md).
+- git-sync on BC-KI01 was FAILED because of **pulsight** (`POSTGRES_PASSWORD` missing in its node `.env`) — not this project; stand 2026-09-18, not re-measured. BC-KI01 has `pwdmgr` registered `active` with checkout `/data/pwdmgr` on `main`, no root compose, no `.env`, no containers (stand 2026-09-18).
+- Not solvable here: a real TLS certificate for a non-localhost deployment (Traefik `tls.certificates`/ACME, OPERATIONS.md) — the node plan terminates TLS at the outer proxy.
+- Roadmap-sized review follow-ups (not blockers): per-tenant storage quotas, MFA, retention/purge of soft-deleted secret versions, `/metrics` (answers 418 until then), image pinning by digest, composite primary keys (409 existence oracle), Ed25519 pinning, groups, invitations.
+- Extension compiles with `tsc` only (no bundler); fine while `background.ts`/`content.ts` stay import-free. Revisit when a bundler arrives.
+- Deferred decisions: Argon2id `KDF_DEFAULT` m=64 MiB/t=3/p=4, `KDF_MINIMUM` m=19 MiB/t=2/p=1 (ADR-0006), lower per-device params for mobile later; OIDC/SAML is Phase 2; mobile apps Phase 4+.
+
+## Ressourcen
+
+Measured 2026-09-23 on `dev-claude`: no `pwdmgr` containers running, 8080/8443/8447 not listening.
 
 | Port / resource | Owner | Purpose |
 |---|---|---|
-| 8080 (127.0.0.1 only) | `infra/compose/compose.yaml` (Traefik) | HTTP entrypoint: `/health` plain, everything else 301 → https — preflight-check before `docker compose up`. |
-| 8443 | `infra/compose/compose.yaml` (Traefik) | HTTPS entrypoint, self-signed default cert — the web client needs this (secure context). |
-| internal `app` network | compose | API ↔ Traefik. |
-| internal `data` network | compose | API ↔ Postgres. |
-| Postgres on `data` network | compose service `postgres` | not published to host. |
-| volume `pgdata` | compose | Postgres data. |
-| network `pwdmgr-test`, container `pwdmgr-test-postgres` (no host port) | backend tests | throw-away; removed at session end 2026-09-15, recreate per TESTING.md. Left behind: the empty, root-owned volume `pwdmgr-review-nm` from a reviewer's aborted test run — the guard blocks `docker volume rm` from a session; operator: `docker volume rm pwdmgr-review-nm`. |
-| volume `pwdmgr-nuget` | SDK container builds | NuGet package cache, owned by the host uid. |
-| network `pwdmgr-bench`, container `pwdmgr-bench-web` (5173, not published) | KDF benchmark (TESTING.md) | transient; remove after the run. |
+| 8080 (127.0.0.1) | `infra/compose` Traefik | HTTP entrypoint, `/health` plain, rest 301 → https. Preflight before `compose up`. |
+| 8443 (`PWDMGR_HTTPS_PORT`; `127.0.0.1:<port>` behind an outer proxy) | `infra/compose` Traefik | HTTPS entrypoint, self-signed default cert (web client needs a secure context). |
+| 8447 on BC-KI01 | planned node deployment | operator's chosen host port (not yet in use). |
+| networks `app`, `data` (internal) | compose | API ↔ Traefik, API ↔ Postgres; Postgres not published. |
+| volume `pwdmgr_pgdata` | compose | dev Postgres; holds verifier users (`v.*`, `v12.*`, `v14.*`, `v15.*`, `e2e.*`, `bob+*` in tenant `dev`) and copy DB `pwdmgr_copy`. `infra/compose/.env` (git-ignored) carries the matching dev seed values. |
+| volume `pwdmgr-nuget` | SDK container builds | NuGet cache, host uid. |
+| network `pwdmgr-test`, container `pwdmgr-test-postgres` | backend tests | throw-away, currently removed; recreate per TESTING.md. |
+| network `pwdmgr-bench`, container `pwdmgr-bench-web` (5173, unpublished) | KDF benchmark | transient, one-off; remove after the run. |
+| anonymous volume `9f2fa0da11f6…` | verifier's throw-away Postgres (2026-09-18) | dangling, operator removal pending. |
+| local images `pwdmgr-api`, `pwdmgr-web` | built from `6e2d0e3` | dev stack. |
 
-No production environments allocated.
+No production environment allocated.
 
-## Sync state — GitHub / Docker Hub
+## Letzte Session
 
-| Target | Status |
-|---|---|
-| GitHub `dannybergt/pwdmgr` | public, default branch `main`, CI green on every push. |
-| Docker Hub `dbergt/pwdmgr-api` | **live**, public, multi-arch (`amd64` + `arm64`), tags `:main` (= `sha-b96b089`, 2026-09-15) and `:sha-<short>` (`sha-4bd4116` … `sha-b96b089`). <https://hub.docker.com/r/dbergt/pwdmgr-api> |
-| Docker Hub `dbergt/pwdmgr-web` | **live** since the #32 merge (2026-09-15): tags `:main` (= `sha-b96b089`) and `:sha-b96b089`, nginx-unprivileged static image. <https://hub.docker.com/r/dbergt/pwdmgr-web> |
-| Docker Hub `dbergt/pwdmgr-worker` | not yet created. Service implementation pending (LDAP sync / rotation worker). |
-| Docker Hub `dbergt/pwdmgr-agent-gateway` | not yet created. May start as a module inside `pwdmgr-api` and extract later (per ADR-0001). |
-
-GitHub Actions secrets configured (verified 2026-05-16):
-
-- `DOCKERHUB_USERNAME` (set 2026-05-16T22:08:57Z) — value `dbergt`.
-- `DOCKERHUB_TOKEN` (set 2026-05-16T22:10:49Z) — Docker Hub PAT, `Read, Write` on `dbergt/pwdmgr-*`. Rotate as part of the regular credential lifecycle.
-
-## Open threads / next steps
-
-- [x] MVP wave 1 (#1 crypto, #2 persistence) merged 2026-09-15 as PRs #24/#25.
-- [x] MVP wave 2–4 (#3 keyring crypto ADR-0009, #4 login + sessions ADR-0008, #5 keyring/vault API, #6 secret API, #7/#8 web client, #9 web image + TLS + CI) merged to `main` 2026-09-15 as #28–#32.
-- [x] `/api/v1/platform/info` reports `version` and `commit` (slice #4).
-- [x] `dbergt/pwdmgr-web` Dockerfile (slice #9). `pwdmgr-worker` / `pwdmgr-agent-gateway` still only when they have real content (§2.5).
-- [ ] Dependabot batch after the merge: #34 (metadata-action v6), #35 (nginx-unprivileged 1.31), #36 (build-push-action v7), #39 (Microsoft.NET.Test.Sdk 18.10.1) — routine, CI green → merge on `FREIGABE`; #33/#37/#38 closed as platform majors with ignore rules (this PR).
-- [ ] **Next:** post-MVP per ROADMAP — tenant/user onboarding without the dev seed (AP-015), vault sharing (wrap the vault key for another user's public key; the crypto is ready), audit events (AP-019), MFA, then the extension and the Windows agent. Decide the order in a new slice plan via `planner`.
-- [ ] Not solvable here: a real TLS certificate for a non-localhost deployment (operator: Traefik `tls.certificates`/ACME, OPERATIONS.md).
-- [x] Verifier hardening run at `b095a7d` (15 rows re-proven incl. P4-15/16, P9-05..07); its two catalogue-wording defects fixed (P9-06 `compose kill` ≠ crash, P4-16 token bucket ≠ fixed window), side finding closed (malformed JSON → 500 in Development → now 400 everywhere, `MalformedBodyTests`), UI retry after a failed keyring load, e2e recipe on the compose network. P3-01..05 texts from the `859d579` run transferred (they had never reached the catalogue).
-- [ ] Follow-ups from the security/ops/migration reviews that are roadmap-sized, not MVP blockers: per-tenant storage quotas (AP-0xx), MFA, retention/purge for soft-deleted secret versions, Prometheus metrics (`/metrics` answers 418 until then), image pinning by digest (tags are pinned to minor/patch, Dependabot `docker-compose` added), NuGet lockfile (`RestorePackagesWithLockFile`) + `--locked-mode`, CodeQL job, composite primary keys to close the 409 existence oracle. Trigger: first slice plan after the MVP merge.
-- [ ] Not solvable here: trademark / domain status for the product working name `Privora` (ADR-0003) — operator decision before any public release.
-- [x] `dotnet build`/`dotnet test` run locally in the SDK container (TESTING.md); no host install needed.
-- [x] Local container tooling: native Docker on `dev-claude` (no Desktop product needed); node/dotnet work runs in containers (TESTING.md).
-- [ ] `npm run lint` in `src/frontend` has no `eslint.config.*` (eslint 10 installed, no config, CI does not run it); `tsc -b` in `build` is the only static check. Trigger: first post-MVP slice — add flat config + `typescript-eslint` and a CI step.
-- [x] `"latest"` pins in `src/frontend` and `src/extension` replaced by explicit versions; extension lockfile + CI job + Dependabot added (PR #3, merged 2026-09-14 as `1595119`). Dependabot's first run started immediately after merge — expect a batch of update PRs (npm, NuGet, Actions, Docker) that need triage.
-- [x] Frontend build tooling moved to `devDependencies` (slice #1).
-- [x] CSP moved to nginx response headers with the web image (slice #9); `frame-ancestors` dropped from the `<meta>` fallback. The Vite **dev server** still blocks its own inline `<style>` under `style-src 'self'` — dev-only cosmetics, the built app is unaffected.
-- [ ] Extension is compiled with `tsc` only (no bundler); `moduleResolution: Bundler` is fine as long as `background.ts`/`content.ts` stay import-free. Revisit when a bundler is introduced.
-
-## Assumptions / decisions deferred
-
-- Argon2id parameters decided by benchmark: `KDF_DEFAULT` m=64 MiB, t=3, p=4; `KDF_MINIMUM` m=19 MiB, t=2, p=1 (ADR-0006). Per-device lower parameters for mobile are a later product decision.
-- OIDC/SAML federation: provider-side prep only; production-grade SSO is Phase 2.
-- Mobile apps: Phase 4+; not addressed in current code.
-
-## Session log
-
-- 2026-05-16: foundation session. Plan-doc duplicate at `C:/data/codex/enterprise-zero-knowledge-pam-plan.md` deleted (byte-identical to repo copy; repo is SSoT per ADR-0005). Constitution root docs created. ADR-0004 (DockerHub naming) and ADR-0005 (plan SSoT) added. Pre-commit + gitleaks wired up. CI extended with image build/push for `pwdmgr-api`. GitHub `origin` set, initial push, PR <https://github.com/dannybergt/pwdmgr/pull/1> opened.
-- 2026-05-16: three follow-up fix commits on the same branch resolved pre-existing CI breakage that surfaced on the first remote build:
-  - missing `Microsoft.Extensions.{DependencyInjection,Configuration,Hosting,Hosting.WindowsServices}` package references in `Pwdmgr.Application`, `Pwdmgr.Infrastructure`, `Pwdmgr.Agent.Service`;
-  - frontend `package-lock.json` generated and CI switched to `npm ci` (Constitution §10);
-  - frontend `tsconfig.json` moduleResolution moved to `Bundler` (was deprecated `Node`); `vite-env.d.ts` added for CSS side-effect imports;
-  - `*.tsbuildinfo` added to `.gitignore`.
-  All four CI jobs (`backend`, `frontend`, `secret-scan`, `docker-api`) green at commit `360f14e`.
-- 2026-05-16: PR #1 squash-merged to `main` as commit `b41cfde`. Maintainer configured `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets. Post-merge `push` event triggered the `docker-api` job which built multi-arch with QEMU (4:08) and pushed `dbergt/pwdmgr-api` to Docker Hub with tags `:main` and `:sha-b41cfde`. First image is live at <https://hub.docker.com/r/dbergt/pwdmgr-api>.
-- 2026-09-14: §10 clean-up session on host `dev-claude` (no `node`/`dotnet` on host; Node work runs in `node:24-alpine` containers). Branch `chore/pin-node-deps`: `"latest"` → caret ranges from the lockfile (frontend, no resolved version changed) and `^6.0.3` for the extension; first `src/extension/package-lock.json`. Pinning TypeScript 6 exposed that the extension never compiled: `moduleResolution: Node` deprecated (→ `Bundler`, like frontend) and TS 6 no longer auto-includes `@types` (→ `@types/chrome` + `types: ["chrome"]`). Added `extension` CI job and `.github/dependabot.yml` (npm×2, nuget, github-actions, docker). Verified `npm ci && npm run build` in container for both projects; gitleaks (v8.21.2, container) clean on staged changes. `reviewer`: no blockers (one nit applied). `verifier`: 4/4 criteria proven with negative controls, no gaps. PR #3 opened, all five CI checks green, squash-merged to `main` as `1595119` on `FREIGABE`; no release tag (chore). Next: plan the first vertical MVP slice (crypto spike) via `planner`.
-- 2026-09-14 (cont.): Dependabot first run triaged. Closed platform majors with rationale (#5/#8 .NET base images 9→10, #11/#14 TypeScript 6→7, #16/#17/#19 `Microsoft.Extensions.*` 9→10) and added `ignore` rules for them (#20). Routine bumps merged on `FREIGABE`: frontend minor/patch group (#13: react 19.3, vite 8.3, eslint 10.10), NuGet 9.0.0→9.0.20 (#15), Actions majors (#4 gitleaks-action v3, #6 checkout v7, #7 setup-dotnet v6, #9 setup-node v7, #10 setup-qemu v4). #7/#9 needed a `@dependabot rebase` after the `checkout` bump. `planner` produced the MVP slice plan → `docs/developer/mvp-slice-plan.md`. No release tag (no product code yet).
-- 2026-09-15: wave 1 of the MVP slice plan, two worktrees in parallel. **Slice #2** (`feature/persistence-foundation`): EF Core 9 + Npgsql 9.0.4 + EFCore.NamingConventions; `Entity`/`TenantScopedEntity` split (Tenant lost its bogus `TenantId`); `User`, `LocalCredential` (PHC hash only, no separate params column — ADR-0007); migration `Identity` with composite `(tenant_id, id)` FK convention and `citext` e-mail (reviewer findings); `Database:MigrateOnStartup`; `/health/live` (no checks) and `/health/ready` (Postgres); JSON console logging. Compose had never been started: Traefik ran the Docker provider without a socket → all routes 404; switched to a file provider. xUnit v3 tests on a throw-away DB per class via `PWDMGR_TEST_PG`, fail (not skip) under `CI=true`. `verifier`: 10/10 catalogue rows proven at `117e0a8` with negative controls (first run 6/6 at `e819c9b`). Known noise: EF 9 logs one Error line on first migrate against an empty DB.
-- 2026-09-15: wave 1 of the MVP slice plan, two worktrees in parallel. **Slice #1** (`feature/crypto-primitives`): `hash-wasm` 4.12.0 adopted (§10 check: MIT, zero deps, audit clean, last release 2024-11), `src/frontend/src/crypto/` with Argon2id KEK derivation (NFKC, salt ≥ 16 B, parameter floor), HKDF-SHA256 and AES-256-GCM via WebCrypto, Base64/hex helpers; Vitest wired into `npm test` and CI (39 tests); 7 Argon2 reference vectors + 2 frozen own vectors, RFC 5869 vectors, tamper tests, 10k-nonce check. Benchmark matrix in Node 24 and headless Chromium 153 (Playwright container against `vite dev`; needed `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS` because Vite 6+ rejects non-localhost `Host`). CSP `script-src` gained `'wasm-unsafe-eval'`. ADR-0006. TS 6 needs `Uint8Array<ArrayBuffer>` for WebCrypto `BufferSource` → exported `Bytes` type. `reviewer`: no blockers; applied its warnings (NFKC-sensitive frozen vector cross-checked with argon2-cffi, key-hygiene caveat documented, `KDF_MAXIMUM` + integer check, `params` required). `verifier`: 7/7 catalogue rows proven at `0a3b60a` (Node + Chromium 153, both frozen vectors derived in-page; CSP negative control: WASM blocked without `'wasm-unsafe-eval'`); earlier full run at `ee141f7`.
-- 2026-09-15 (cont.): `FREIGABE` → #24 squash-merged (`02f7c57`), #25 merged `main` back in, retargeted from #24 to `main` (close/reopen for CI), squash-merged (`434c3bf`). Both `main` runs green incl. `docker-api` push (`dbergt/pwdmgr-api:main`, `:sha-02f7c57`, `:sha-434c3bf`). Worktrees `.worktrees/{crypto,persistence}` removed, `pwdmgr-test-postgres` + network `pwdmgr-test` removed; volume `pwdmgr-nuget` kept as cache.
-- 2026-09-15 (wave 2–4): after the user's directive to work through to a usable product, slices #3–#9 in parallel worktrees: **#4** login/sessions (Konscious Argon2id + PHC codec, cookie sessions, tenant query filter, login throttle with per-account + per-client windows and a verifier gate after the reviewer found a remote-OOM vector, audit log, session purge, seed; verifier 14/14 at `3a99afd`), **#3** keyring crypto (X25519, wrapping, DEKs; reviewer found a server-side public-key substitution — now bound into the private-key AAD; verifier 5/5 + 1 at `859d579`, secure-context requirement discovered), **#5/#6** keyring/vault/secret API (reviewer: client-chosen ids and version numbers are the contract; membership query shared), **#7/#8** React client (login → enrol/unlock → vault; component tests; Playwright golden path in repo), **#9** web image (nginx-unprivileged, header CSP), Traefik TLS `:8443`, `docker-web` + `e2e` CI jobs. Dev-stack harness lessons: tests must not share a 3-s session TTL; removing the compose volume is blocked by the destructive guard (clear dev tables via psql instead); Chromium logs designed 401/404 probes as console errors.
-- 2026-09-15 (hardening close-out): `verifier` re-run at `b095a7d` on the full stack — 12/14 requested rows proven outright, two "refuted" only in catalogue wording (`docker compose kill` is a manual stop Docker never restarts → proof step is now a process-level `kill -TERM 1`, restart observed at +2 s, Traefik 200 at +42 s; write limit is a token bucket with burst 60, so "61 in a minute" was a fixed-window claim → criterion is now a parallel burst). Side finding fixed: ASP.NET's Development default rethrows body-binding failures, so every malformed JSON body (even unauthenticated on `/auth/login`) answered 500 with a logged stack trace in the compose stack → `ThrowOnBadRequest = false`, `MalformedBodyTests` in a Development-environment fixture (7 red without the fix, 7 green with it; API tests 40). `UnlockPage` gained a "Try again" after a failed keyring load (verifier saw `ERR_NETWORK_CHANGED` strand the page; 64 Vitest). TESTING.md e2e recipe moved from `--network host` to the compose `public` network (`E2E_BASE_URL=https://reverse-proxy:8443`) — host-mode failed 2/2 on this host from foreign container churn. Review of the close-out (`reviewer`, `ops-reviewer`, `security-reviewer`): API headers moved to middleware so framework 400/401/429 carry `no-store`/`nosniff` (`5e27dd9`), `UseStatusCodePages` gives them a ProblemDetails body with `traceId` (`c8b0f66`), runbook now describes the real 502/503 recovery path (Traefik's own probe + API boot, `start_period` is a grace window) and the local e2e recipe passes `E2E_PASSWORD` (`41f9b13`). P4-17 proven live by the `verifier` at `c8b0f66`. Catalogue has no OPEN/re-prove row (71 rows); next full pass after the merge on `main`. Operator hand-off: the reviewer's empty stray volume `pwdmgr-review-nm` (the guard blocks its removal from here).
-- 2026-09-15 (merge): `FREIGABE` for the stack. #28 merged clean; #29 needed `main` merged in (additive doc conflicts in `DECISIONS.md`/catalogue → union, slice #4 before #3); #30/#31/#32 then conflicted only because a squash repeats the branch tree under a new SHA — resolved by taking the branch side each time (tree diff vs pre-merge HEAD = 0; git's auto-merge had resurrected the removed endpoint filter in `Program.cs` on the web branch once, caught by that check). Retarget + close/reopen per PR for CI. `main` `b96b089` == web branch `652f440` tree. Images: `dbergt/pwdmgr-api:main`/`:sha-b96b089`, first `dbergt/pwdmgr-web:main`/`:sha-b96b089`. Dependabot opened #33–#39 on the new `main`: three platform majors closed with ignore rules, four routine bumps left for the next `FREIGABE`. Worktrees `.worktrees/{keyring,auth,vaults,secrets,web}` and their remote branches removed.
+- 2026-09-23: STATE v2 migration (`state-compact`, autonomous subagent). Source was the newest STATE on the local branch `feature/web-sharing` (`194b5da`), not the older one on `main`; checked against `gh`/`git`: Dependabot #41 closed (superseded by #44), #42–#45 new and green, stack still unpushed, no competing STATE PR open. Old file archived verbatim to `docs/history/STATE-2026.md`. The local stack was not touched.
+- davor: session of 2026-09-18 (ended 18:05Z) — #14 review follow-ups, outer-proxy client-address fix, verifier full + delta pass, catalogue 0 OPEN; see `docs/history/STATE-2026.md` ("Session log").
