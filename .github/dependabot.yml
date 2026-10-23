@@ -67,3 +67,77 @@ updates:
       # OPERATIONS.md, not a tag bump — postgres:18 also moved PGDATA and broke the volume (see #33).
       - dependency-name: postgres
         update-types: ["version-update:semver-major"]
+
+  # --- ergaenzt von tools/cve-rollout/rollout.py ---
+  - package-ecosystem: nuget
+    directory: "/src/agent/Pwdmgr.Agent.Cli"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      nuget-src-agent-pwdmgr-agent-cli-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: nuget
+    directory: "/src/agent/Pwdmgr.Agent.Service"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      nuget-src-agent-pwdmgr-agent-service-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: nuget
+    directory: "/src/backend/Pwdmgr.Api"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      nuget-src-backend-pwdmgr-api-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: nuget
+    directory: "/src/backend/Pwdmgr.Application"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      nuget-src-backend-pwdmgr-application-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: nuget
+    directory: "/src/backend/Pwdmgr.Domain"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      nuget-src-backend-pwdmgr-domain-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: nuget
+    directory: "/src/backend/Pwdmgr.Infrastructure"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      nuget-src-backend-pwdmgr-infrastructure-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: nuget
+    directory: "/tests/backend/Pwdmgr.Api.Tests"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      nuget-tests-backend-pwdmgr-api-tests-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: nuget
+    directory: "/tests/backend/Pwdmgr.Infrastructure.Tests"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      nuget-tests-backend-pwdmgr-infrastructure-tests-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
